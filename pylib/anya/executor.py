@@ -93,9 +93,12 @@ async def execute_job(
     memory_path: Path,
     email_to: list[str],
     llm_config: LLMConfig | None = None,
-) -> None:
+    skip_email: bool = False,
+) -> tuple[str, str] | None:
     '''
-    Execute a single job: fetch, LLM, blotter, memory, email.
+    Execute a single job: fetch, LLM, blotter, memory.
+    Returns (job_id, summary) on success, None on failure.
+    Does not send email when skip_email=True; caller may batch and send one.
     '''
     from tenacity import retry, stop_after_attempt, wait_exponential
     import structlog
@@ -171,12 +174,13 @@ async def execute_job(
         if resolved_content:
             prune_memory(memory_path, resolved_content)
 
-    # Blotter and email (exclude MEMORY and RESOLVED blocks from summary)
+    # Blotter (exclude MEMORY and RESOLVED blocks from summary)
     summary = response.split('---MEMORY---')[0].split('---RESOLVED---')[0].strip()
     append_blotter(blotter_path, job.id, summary[:2000])  # truncate for blotter
 
-    if email_to:
+    if email_to and not skip_email:
         html = f'<h2>Job: {job.id}</h2><pre>{summary}</pre>'
         await send_email(to=email_to, subject=f'[Anya] {job.id}', html=html, text=summary)
 
     log.info('job complete', job_id=job.id)
+    return (job.id, summary)
