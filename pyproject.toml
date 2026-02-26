@@ -1,0 +1,42 @@
+[build-system]
+requires = ['hatchling']
+build-backend = 'hatchling.build'
+
+[project]
+name = 'anya'
+version = '0.1.0'
+description = 'Headless Claude agent runner: scheduled jobs, skills/flows, email reports, blotter'
+readme = 'README.md'
+requires-python = '>=3.12'
+dependencies = [
+    'anthropic>=0.50',
+    'httpx>=0.27',
+    'structlog>=24.0',
+    'tenacity>=9.0',
+    'fire>=0.7',
+    'rich>=13.0',
+    'python-dotenv>=1.0',
+    'feedparser>=6.0',
+    'cssutils',  # Used by ogbujipt.text.html for CSS parsing
+    'ogbujipt',  # HTML→Markdown via clean_html, html2markdown
+    'selectolax',  # Required by ogbujipt.text.html
+    'tiktoken',  # Required by ogbujipt.text.html
+]
+
+[project.optional-dependencies]
+scheduler-apscheduler = ['apscheduler>=3.10']
+scheduler-cron = ['python-crontab>=3.0']
+scheduler-schedule = ['schedule>=2.0']
+imap = ['aiosmtplib>=3.0']
+all = [
+    'anya[scheduler-apscheduler,scheduler-cron,scheduler-schedule,imap]',
+]
+
+[project.scripts]
+anya = 'anya.cli.main:main'
+
+[tool.hatch.build.targets.wheel]
+packages = ['pylib/anya']
+
+[tool.hatch.build.sources]
+'pylib/anya' = 'anya'

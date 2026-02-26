@@ -1,0 +1,7 @@
+# Lines starting with `#` are ignored
+# Weight|URL|context|Method (optional: plain or crawl4ai; default plain)
+50|https://old.reddit.com/r/selfhosted/comments/sns3bh/wondering_about_using_seafile_but_heard_security/|Been meaning to try Seafile open-source file sharing|crawl4ai
+50|https://docs.waveterm.dev/durable-sessions|Try waveterm's durable ssh sessions
+20|https://unclaimedproperty.colorado.gov/|Have I checked Colorado's escheat (unclaimed property) lately?
+40|https://old.reddit.com/r/godot/comments/1qu76p6/godot_valley_tutorial_is_gold/?%24deep_link=true&correlation_id=fbf444cf-0ff9-471c-9132-464c29bec970&post_fullname=t3_1qu76p6&post_index=4&ref=email_digest&ref_campaign=email_digest&ref_source=email&target_user=CodeGriot&utm_content=post_title&%243p=e_as&_branch_match_id=1259346073357591128&utm_medium=Email%20Amazon%20SES&_branch_referrer=H4sIAAAAAAAAA22Q3UrEMBCFn6Z71%2F1pY5cKRWRFHyNkk0k2mCZxMrF647M7dV2vhAw5fIdzGOZClMv9bodgjKetynkbfHzd9fmh6USfJ5CqbFgm9M5HFWTFMF3WVNM%2FNt0zv2VZtr95nWYGyOOSScQ%2FkxkiFZaHt3oc8nAz5bsKAT4lVeJybvZFuhTMWtpz710nDECW6z5N%2F0RYoekGnRAhKPIpSm%2BY27MVQmjb7q0dW3E86HY89F0rBqG78Qx6PO45l1MhaWsIUc2w1vXyb5%2Br6aOBD3YEAwTLCmblgzTeQaErlFrNWXkX%2F3dLqqjh5jEkhQ5I1gLI9JQMvKBf7zJUmqVOkfg27PwsQJ4CbL64CBB9dPKMaeHkdLpgmuEbIM9n8qsBAAA%3D|Try the Godot Valley tutorial|crawl4ai
+30|https://clauswilke.com/dataviz/|Learn something new from Fundamentals of Data Visualization
