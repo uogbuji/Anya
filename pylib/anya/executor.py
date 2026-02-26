@@ -1,6 +1,7 @@
 '''
-Job executor: fetch data, run Claude, update blotter/memory, send email.
+Job executor: fetch data, run LLM, update blotter/memory, send email.
 Read-only; no destructive actions.
+Supports Anthropic (Claude) and OpenAI-compatible APIs.
 '''
 
 import os
@@ -8,11 +9,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-from anthropic import AsyncAnthropic
-
 from anya.actions import expand_actions
 from anya.blotter import append_blotter, read_blotter
 from anya.email_unosend import send_email
+from anya.llm import LLMConfig, call_llm
 from anya.fetchers import fetch_url
 from anya.fetchers.rss import fetch_rss
 from anya.job.loader import Job, should_run_job
@@ -92,10 +92,10 @@ async def execute_job(
     blotter_path: Path,
     memory_path: Path,
     email_to: list[str],
-    api_key: str | None = None,
+    llm_config: LLMConfig | None = None,
 ) -> None:
     '''
-    Execute a single job: fetch, Claude, blotter, memory, email.
+    Execute a single job: fetch, LLM, blotter, memory, email.
     '''
     from tenacity import retry, stop_after_attempt, wait_exponential
     import structlog
@@ -147,18 +147,13 @@ async def execute_job(
 {main_md_expanded}
 ''' + BLOB_PROMPT.format(data=data, blotter=blotter, memory=memory)
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
-    async def _call_claude():
-        client = AsyncAnthropic(api_key=api_key or os.environ.get('ANTHROPIC_API_KEY'))
-        msg = await client.messages.create(
-            model='claude-sonnet-4-20250514',
-            max_tokens=4096,
-            system=SYSTEM_PROMPT,
-            messages=[{'role': 'user', 'content': user_content}],
-        )
-        return msg.content[0].text
+    cfg = llm_config or LLMConfig.from_env()
 
-    response = await _call_claude()
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    async def _call():
+        return await call_llm(SYSTEM_PROMPT, user_content, cfg)
+
+    response = await _call()
 
     # Parse memory block if present
     if '---MEMORY---' in response and '---END MEMORY---' in response:

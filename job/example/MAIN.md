@@ -5,7 +5,7 @@ phase: ignore
 
 # Example Job
 
-This is a sample job for the Anya headless Claude agent.
+This is a sample job for the Anya headless LLM agent.
 
 ## Instructions
 
@@ -28,4 +28,4 @@ You can add fetch URLs in a `fetch.py` script in this directory, or use inline a
 fetch('https://old.reddit.com/r/LocalLLaMA/')
 ---END ACTION---
 
-The executor runs any `.py` files in the job dir before calling Claude.
+The executor runs any `.py` files in the job dir before calling the LLM.

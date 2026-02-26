@@ -5,11 +5,12 @@ build-backend = 'hatchling.build'
 [project]
 name = 'anya'
 version = '0.1.0'
-description = 'Headless Claude agent runner: scheduled jobs, skills/flows, email reports, blotter'
+description = 'Headless LLM agent runner: scheduled jobs, skills/flows, email reports, blotter (Claude, OpenAI-compatible)'
 readme = 'README.md'
 requires-python = '>=3.12'
 dependencies = [
     'anthropic>=0.50',
+    'openai>=1.0',
     'httpx>=0.27',
     'structlog>=24.0',
     'tenacity>=9.0',

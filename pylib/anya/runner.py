@@ -11,6 +11,7 @@ import structlog
 from anya.blotter import append_blotter
 from anya.executor import execute_job
 from anya.job.loader import discover_jobs, filter_by_phase, should_run_job
+from anya.llm import LLMConfig
 
 
 async def run_tick(
@@ -19,6 +20,7 @@ async def run_tick(
     memory_path: Path,
     email_to: list[str],
     phases: set[str] | None = None,
+    llm_config: LLMConfig | None = None,
 ) -> None:
     '''
     One tick of the scheduler: run all due jobs.
@@ -39,6 +41,7 @@ async def run_tick(
                 blotter_path=blotter_path,
                 memory_path=memory_path,
                 email_to=email_to,
+                llm_config=llm_config,
             )
         except Exception:
             log.exception('job failed', job_id=job.id)
