@@ -8,7 +8,7 @@ from pathlib import Path
 
 import structlog
 
-from anya.blotter import append_blotter
+from anya.blotter import BlotterLockError, append_blotter
 from anya.email_unosend import send_email
 from anya.executor import execute_job
 from anya.job.loader import discover_jobs, filter_by_phase, should_run_job
@@ -51,8 +51,13 @@ async def run_tick(
                 sections.append(result)
         except Exception as e:
             log.exception('job failed', job_id=job.id)
-            append_blotter(blotter_path, job.id, f'ERROR: job failed - {job.id}')
-            sections.append((job.id, f'ERROR: job failed - {e}'))
+            try:
+                append_blotter(blotter_path, job.id, f'ERROR: job failed - {job.id}')
+            except BlotterLockError as lock_err:
+                err_msg = f'**System issue**: {lock_err}\n\nERROR: job failed - {e}'
+            else:
+                err_msg = f'ERROR: job failed - {e}'
+            sections.append((job.id, err_msg))
 
     if email_to and sections:
         html_parts = [f'<h2>Job: {jid}</h2><pre>{content}</pre>' for jid, content in sections]

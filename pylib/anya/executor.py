@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 from anya.actions import expand_actions
-from anya.blotter import append_blotter, read_blotter
+from anya.blotter import BlotterLockError, append_blotter, read_blotter
 from anya.email_unosend import send_email
 from anya.llm import LLMConfig, call_llm
 from anya.fetchers import fetch_url
@@ -176,7 +176,10 @@ async def execute_job(
 
     # Blotter (exclude MEMORY and RESOLVED blocks from summary)
     summary = response.split('---MEMORY---')[0].split('---RESOLVED---')[0].strip()
-    append_blotter(blotter_path, job.id, summary[:2000])  # truncate for blotter
+    try:
+        append_blotter(blotter_path, job.id, summary[:2000])  # truncate for blotter
+    except BlotterLockError as e:
+        summary = f'**System issue**: {e}\n\n---\n\n{summary}'
 
     if email_to and not skip_email:
         html = f'<h2>Job: {job.id}</h2><pre>{summary}</pre>'

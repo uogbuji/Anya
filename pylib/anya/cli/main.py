@@ -1,6 +1,7 @@
 '''CLI for headless LLM agent runner (Anthropic Claude, OpenAI-compatible).'''
 
 import asyncio
+import os
 from pathlib import Path
 
 import fire
@@ -50,7 +51,7 @@ def main() -> None:
 
 def run_once(
     job_dir: str = 'job',
-    blotter: str = 'data/blotter.txt',
+    blotter: str = '',
     memory: str = 'data/memory.txt',
     email_to: str = '',
     phases: str = 'default',
@@ -61,7 +62,7 @@ def run_once(
     '''
     Run one tick: discover jobs, run due ones, email report.
     job_dir: directory containing job subdirs (each with MAIN.md)
-    blotter: path to append-only log
+    blotter: path to append-only log (default: BLOTTER_FILE env or data/blotter.txt)
     memory: path to long-term memory
     email_to: comma-separated email addresses for reports
     phases: comma-separated phases to include (default: default). Jobs with phase: ignore
@@ -71,7 +72,7 @@ def run_once(
     llm_base_url: base URL for OpenAI-compatible API (e.g. http://localhost:8080/v1).
     '''
     job_path = Path(job_dir)
-    blotter_path = Path(blotter)
+    blotter_path = Path(blotter or os.environ.get('BLOTTER_FILE', 'data/blotter.txt'))
     memory_path = Path(memory)
     to_list = [e.strip() for e in email_to.split(',') if e.strip()]
     phase_set = {p.strip() for p in phases.split(',') if p.strip()}
@@ -81,7 +82,7 @@ def run_once(
 
 def serve(
     job_dir: str = 'job',
-    blotter: str = 'data/blotter.txt',
+    blotter: str = '',
     memory: str = 'data/memory.txt',
     email_to: str = '',
     interval: float = 86400,
@@ -98,7 +99,7 @@ def serve(
     '''
     console = Console()
     job_path = Path(job_dir)
-    blotter_path = Path(blotter)
+    blotter_path = Path(blotter or os.environ.get('BLOTTER_FILE', 'data/blotter.txt'))
     memory_path = Path(memory)
     to_list = [e.strip() for e in email_to.split(',') if e.strip()]
     phase_set = {p.strip() for p in phases.split(',') if p.strip()}

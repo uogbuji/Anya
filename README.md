@@ -1,5 +1,25 @@
 Anya. Headless LLM agent runner: scheduled jobs, skills/flows, email reports, blotter. **Read-only** in intent—no destructive actions. Supports Anthropic Claude and OpenAI-compatible APIs (e.g. mlx_lm.server).
 
+Your Anya has jobs. Each job is a DAG that combines Deterministic Actions (D) and (multimodel) LLM inference (I). The general shape is D → I → D: deterministic fetch/gather, then inference, then deterministic output handling. **Potentially destructive actions stay out of the I stages**—the LLM produces text only; it never has direct tool-calling. Anya's executor enforces an air gap: inference output flows through a controlled pipeline (blotter, email, memory) rather than to arbitrary shell, file, or browser actions. This contrasts with agent frameworks like [OpenClaw](https://dev.to/curi0us_dev/openclaw-security-risks-top-threats-and-practical-mitigations-5e7n), where the LLM directly invokes tools—broad permissions plus prompt injection or malicious skills can chain into real-world impact. Anya's design reduces that surface: the executor is the single, auditable boundary between inference and the outside world.
+
+```mermaid
+flowchart TB
+    subgraph Anya["Anya: D → I → D (air-gapped inference)"]
+        D1["D: Deterministic fetch<br/>fetch.py, rss, fetch:"]
+        I["I: LLM inference<br/>text in → text out only"]
+        D2["D: Deterministic output<br/>blotter, email, memory"]
+        D1 --> I --> D2
+    end
+
+    subgraph AgentFrameworks["Typical agent frameworks (e.g. OpenClaw)"]
+        I2["LLM"]
+        I2 --> T1["shell"]
+        I2 --> T2["file I/O"]
+        I2 --> T3["browser"]
+        I2 --> T4["messaging"]
+    end
+```
+
 # Install
 
 ```bash
@@ -93,7 +113,7 @@ docker run -d -p 11235:11235 --name crawl4ai --shm-size=1g unclecode/crawl4ai:la
 
 ## Blotter & memory
 
-- **Blotter** (`data/blotter.txt`): append-only log for review
+- **Blotter** (`data/blotter.txt` by default): append-only log for review. Set `BLOTTER_FILE` env or `--blotter` CLI to share with other agent systems. Uses file locking (`{blotter}.lock`); `BLOTTER_LOCK_TIMEOUT` (default 30s) — if lock cannot be acquired, reports a system issue for you to investigate (e.g. stale lock file)
 - **Memory** (`data/memory.txt`): long-term; the LLM can append via `---MEMORY---` block, or prune resolved issues via `---RESOLVED---` block
 
 # Scheduler
