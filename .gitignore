@@ -6,3 +6,8 @@ dist/
 data/
 .env
 *.log
+
+# Ignore everything in job/ except specified subdirs
+job/*
+!job/example/
+!job/example/**
