@@ -55,6 +55,7 @@ def run_once(
     memory: str = 'data/memory.txt',
     email_to: str = '',
     phases: str = 'default',
+    append_only_blotter: bool = True,
     provider: str = '',
     model: str = '',
     llm_base_url: str = '',
@@ -67,6 +68,8 @@ def run_once(
     email_to: comma-separated email addresses for reports
     phases: comma-separated phases to include (default: default). Jobs with phase: ignore
       are skipped unless "ignore" is in phases.
+    append_only_blotter: if True (default), do not read blotter for LLM context; use
+      --no-append-only-blotter to pass tail of blotter to LLM for tuning.
     provider: llm provider (anthropic | openai). Default from LLM_PROVIDER env.
     model: model name. Default from LLM_MODEL env.
     llm_base_url: base URL for OpenAI-compatible API (e.g. http://localhost:8080/v1).
@@ -77,7 +80,17 @@ def run_once(
     to_list = [e.strip() for e in email_to.split(',') if e.strip()]
     phase_set = {p.strip() for p in phases.split(',') if p.strip()}
     llm_config = _build_llm_config(provider, model, llm_base_url)
-    asyncio.run(run_tick(job_path, blotter_path, memory_path, to_list, phases=phase_set, llm_config=llm_config))
+    asyncio.run(
+        run_tick(
+            job_path,
+            blotter_path,
+            memory_path,
+            to_list,
+            phases=phase_set,
+            llm_config=llm_config,
+            append_only_blotter=append_only_blotter,
+        )
+    )
 
 
 def serve(
@@ -88,6 +101,7 @@ def serve(
     interval: float = 86400,
     scheduler: str = 'asyncio',
     phases: str = 'default',
+    append_only_blotter: bool = True,
     provider: str = '',
     model: str = '',
     llm_base_url: str = '',
@@ -95,6 +109,8 @@ def serve(
     '''
     Run scheduler: tick every interval seconds (default 24h).
     phases: comma-separated phases to include (default: default).
+    append_only_blotter: if True (default), do not read blotter for LLM; use
+      --no-append-only-blotter for tail read.
     provider, model, llm_base_url: LLM config (see run).
     '''
     console = Console()
@@ -106,7 +122,15 @@ def serve(
     llm_config = _build_llm_config(provider, model, llm_base_url)
 
     async def tick():
-        await run_tick(job_path, blotter_path, memory_path, to_list, phases=phase_set, llm_config=llm_config)
+        await run_tick(
+            job_path,
+            blotter_path,
+            memory_path,
+            to_list,
+            phases=phase_set,
+            llm_config=llm_config,
+            append_only_blotter=append_only_blotter,
+        )
 
     sched = get_scheduler(kind=scheduler, interval_seconds=interval)
     sched.schedule(tick)

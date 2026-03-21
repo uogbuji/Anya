@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 from anya.actions import expand_actions
-from anya.blotter import BlotterLockError, append_blotter, read_blotter
+from anya.blotter import BlotterLockError, append_blotter, read_blotter_tail
 from anya.email_unosend import send_email
 from anya.llm import LLMConfig, call_llm
 from anya.fetchers import fetch_url
@@ -92,6 +92,7 @@ async def execute_job(
     blotter_path: Path,
     memory_path: Path,
     email_to: list[str],
+    append_only_blotter: bool = True,
     llm_config: LLMConfig | None = None,
     skip_email: bool = False,
 ) -> tuple[str, str] | None:
@@ -112,8 +113,11 @@ async def execute_job(
 
     # Gather context
     memory = read_memory(memory_path)
-    blotter_lines = read_blotter(blotter_path, limit=50)
-    blotter = '\n'.join(blotter_lines) if blotter_lines else '(empty)'
+    if append_only_blotter:
+        blotter = '(empty)'
+    else:
+        blotter_lines = read_blotter_tail(blotter_path, limit=50)
+        blotter = '\n'.join(blotter_lines) if blotter_lines else '(empty)'
 
     # Run job .py scripts if any (read-only data gathering)
     py_output = await run_job_py(job)

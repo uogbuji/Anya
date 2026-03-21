@@ -21,11 +21,13 @@ async def run_tick(
     memory_path: Path,
     email_to: list[str],
     phases: set[str] | None = None,
+    append_only_blotter: bool = True,
     llm_config: LLMConfig | None = None,
 ) -> None:
     '''
     One tick of the scheduler: run all due jobs.
     phases: include only jobs whose phase is in this set (default: {"default"}).
+    append_only_blotter: if True, do not read blotter for LLM context.
     Sends one combined email with a section per job (when email_to is set).
     '''
     phases = phases or {'default'}
@@ -44,6 +46,7 @@ async def run_tick(
                 blotter_path=blotter_path,
                 memory_path=memory_path,
                 email_to=email_to,
+                append_only_blotter=append_only_blotter,
                 llm_config=llm_config,
                 skip_email=True,
             )
