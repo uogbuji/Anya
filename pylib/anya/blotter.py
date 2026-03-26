@@ -48,8 +48,29 @@ def append_blotter(blotter_path: Path, job_id: str, entry: str) -> None:
 
 
 def read_blotter(blotter_path: Path, limit: int = 100) -> list[str]:
-    '''Read last N lines from blotter (for context to Claude).'''
+    '''Read last N lines from blotter (for context to Claude).
+    Loads full file; use read_blotter_tail for large files.'''
     if not blotter_path.exists():
         return []
     lines = blotter_path.read_text(encoding='utf-8').strip().splitlines()
     return lines[-limit:] if limit else lines
+
+
+def read_blotter_tail(blotter_path: Path, limit: int = 50) -> list[str]:
+    '''Read last N lines efficiently without loading the full file.
+    For use when append_only_blotter=False.'''
+    if not blotter_path.exists():
+        return []
+    size = blotter_path.stat().st_size
+    if size == 0:
+        return []
+    read_size = min(65536, size)  # 64KB tail
+    with blotter_path.open('rb') as f:
+        f.seek(-read_size, 2)
+        tail = f.read().decode('utf-8', errors='replace')
+    if read_size < size:
+        first_nl = tail.find('\n')
+        if first_nl >= 0:
+            tail = tail[first_nl + 1:]
+    lines = tail.splitlines()
+    return lines[-limit:] if len(lines) > limit else lines

@@ -41,7 +41,7 @@ uv pip install -U .
 In reality I'd use 1password, so
 
 ```
-op run --no-masking --env-file=.env -- anya run --email_to=uche@ogbuji.net 
+op run --no-masking --env-file=.env -- anya run --email_to=uche@example.com
 ```
 
 ## LLM providers
@@ -64,7 +64,7 @@ LLM_PROVIDER=openai LLM_MODEL=mlx-community/Mistral-7B-Instruct-v0.3-4bit anya r
 CLI overrides: `--provider`, `--model`, `--llm_base_url`.
 
 ```sh
-op run --no-masking --env-file=.env -- anya run --provider=openai --llm_base_url=http://localhost:8080/ --model=mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit --email_to=uche@ogbuji.net
+op run --no-masking --env-file=.env -- anya run --provider=openai --llm_base_url=http://localhost:8080/ --model=mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit --email_to=uche@example.com
 ```
 
 # Job structure
@@ -116,6 +116,7 @@ docker run -d -p 11235:11235 --name crawl4ai --shm-size=1g unclecode/crawl4ai:la
 ## Blotter & memory
 
 - **Blotter** (`data/blotter.txt` by default): append-only log for review. Set `BLOTTER_FILE` env or `--blotter` CLI to share with other agent systems. Uses file locking (`{blotter}.lock`); `BLOTTER_LOCK_TIMEOUT` (default 30s) — if lock cannot be acquired, reports a system issue for you to investigate (e.g. stale lock file)
+- **`--append-only-blotter`** (default: True): when True, blotter is not read for LLM context (append-only). Use `--no-append-only-blotter` to pass the last 50 lines (efficient tail read) to the LLM for tuning
 - **Memory** (`data/memory.txt`): long-term; the LLM can append via `---MEMORY---` block, or prune resolved issues via `---RESOLVED---` block
 
 # Scheduler
