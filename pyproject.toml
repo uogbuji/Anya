@@ -4,7 +4,7 @@ build-backend = 'hatchling.build'
 
 [project]
 name = 'anya'
-version = '0.1.0'
+dynamic = ['version']
 description = 'Headless LLM agent runner: scheduled jobs, skills/flows, email reports, blotter (Claude, OpenAI-compatible)'
 readme = 'README.md'
 requires-python = '>=3.12'
@@ -23,6 +23,7 @@ dependencies = [
     'ogbujipt',  # HTML→Markdown via clean_html, html2markdown
     'selectolax',  # Required by ogbujipt.text.html
     'tiktoken',  # Required by ogbujipt.text.html
+    'wordloom>=0.10.1',  # Prompts file format (anya.loom)
 ]
 
 [project.optional-dependencies]
@@ -36,6 +37,9 @@ all = [
 
 [project.scripts]
 anya = 'anya.cli.main:main'
+
+[tool.hatch.version]
+path = 'pylib/anya/__about__.py'
 
 [tool.hatch.build.targets.wheel]
 packages = ['pylib/anya']

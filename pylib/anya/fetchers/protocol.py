@@ -169,7 +169,7 @@ def create_fetcher(fetcher_type: str = 'simple', **kwargs) -> WebFetcher:
     Factory function to create a web fetcher.
 
     Args:
-        fetcher_type: 'simple' (plain HTTP) or 'crawl4ai' (Crawl4AI service)
+        fetcher_type: 'simple' / 'plain', 'crawl4ai', or 'reddit'
         **kwargs: Additional arguments for the fetcher
 
     Returns:
@@ -179,6 +179,9 @@ def create_fetcher(fetcher_type: str = 'simple', **kwargs) -> WebFetcher:
         return SimpleHttpFetcher(**kwargs)
     if fetcher_type == 'crawl4ai':
         return Crawl4AIFetcher(**kwargs)
+    if fetcher_type == 'reddit':
+        from anya.fetchers.reddit import RedditFetcher  # local import to avoid cycle
+        return RedditFetcher(**kwargs)
     raise ValueError(f'Unknown fetcher type: {fetcher_type}')
 
 

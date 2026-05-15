@@ -1,3 +1,6 @@
-'''Headless LLM agent runner: scheduled jobs, skills/flows, email reports, blotter (Claude, OpenAI-compatible).'''
+'''Headless LLM agent runner: scheduled jobs, skills/flows, email reports, blotter.'''
 
-__version__ = '0.1.0'
+from anya.__about__ import __version__
+from anya.inference import InferenceProtocolError, UpstreamAPIError, inference
+
+__all__ = ['inference', 'InferenceProtocolError', 'UpstreamAPIError', '__version__']

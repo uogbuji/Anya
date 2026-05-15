@@ -1,0 +1,21 @@
+# WordLoom prompts for the example job.
+lang = 'en'
+
+[summarize]
+_ = '''
+Analyze the fetched data below and produce a short summary report.
+
+If you find anything critical that should be remembered across runs, wrap it in:
+
+---MEMORY---
+<critical finding>
+---END MEMORY---
+
+Otherwise, just output a short report. The report will be emailed and logged
+to the blotter.
+
+## Fetched data
+
+{data}
+'''
+_m = ['data']

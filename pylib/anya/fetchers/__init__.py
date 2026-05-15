@@ -1,4 +1,4 @@
-'''Data fetchers for jobs: HTTP, RSS. Pluggable Web fetcher protocol.'''
+'''Data fetchers for jobs: HTTP, RSS, Reddit. Pluggable Web fetcher protocol.'''
 
 from anya.fetchers.http import fetch_http
 from anya.fetchers.protocol import (
@@ -9,11 +9,13 @@ from anya.fetchers.protocol import (
     create_fetcher,
     fetch_url,
 )
+from anya.fetchers.reddit import RedditFetcher
 from anya.fetchers.rss import fetch_rss
 
 __all__ = [
     'Crawl4AIFetcher',
     'FetchResult',
+    'RedditFetcher',
     'SimpleHttpFetcher',
     'WebFetcher',
     'create_fetcher',
