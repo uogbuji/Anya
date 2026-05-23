@@ -13,9 +13,9 @@ import os
 import re
 from urllib.parse import urlparse, urlunparse
 
-import httpx
 from ogbujipt.text.html import clean_html, html2markdown
 
+from anya.fetchers._cache import cached_client
 from anya.fetchers.protocol import FetchResult, WebFetcher
 from anya.fetchers.rss import fetch_rss
 
@@ -53,7 +53,7 @@ class RedditFetcher(WebFetcher):
         old_url = _to_old_reddit(url)
         fallback_reason: str
         try:
-            async with httpx.AsyncClient(
+            async with cached_client(
                 timeout=self.timeout,
                 follow_redirects=True,
                 headers={'User-Agent': self.user_agent},

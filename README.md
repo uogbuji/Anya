@@ -37,7 +37,7 @@ uv pip install -U .
 
 1. Set env. For OpenRouter (preferred): `OPENROUTER_API_KEY=...`. For a local OpenAI-compatible server (e.g. oMLX): `LLM_PROVIDER=openai`, `LLM_MODEL=<model>`, `LLM_BASE_URL=http://localhost:8080/v1`. For Anthropic direct: `ANTHROPIC_API_KEY=...`. Plus email (default Resend): `RESEND_API_KEY=...`, `RESEND_FROM` (e.g. `Anya <anya@yourdomain.com>`).
 2. (Optional) create `config.toml` with model aliases / backend definitions (see below)
-3. Create jobs in `job/` — one dir per job, each with `anya.toml` + `controller.py` + `anya.loom`
+3. Create jobs in `job/` — one dir per job, each with `anya.toml` + `controller.py` + `anya.loom.toml`
 4. Run once: `anya run --email_to=you@example.com`
 5. Or serve (daily): `anya serve --email_to=you@example.com --interval=86400`
 6. Run example job too: `anya run --phases=default,ignore`
@@ -105,7 +105,7 @@ job/
   my-job/
     anya.toml      # job metadata
     controller.py  # entry point (D Python program)
-    anya.loom      # WordLoom prompt file
+    anya.loom.toml # WordLoom prompt file (.loom.toml so editors pick up TOML mode)
     .env           # optional per-job env
 ```
 
@@ -118,7 +118,7 @@ frequency   = "daily"        # daily | weekly | sundays | saturday | weekday
 phase       = "default"      # default | ignore (ignore = skip unless --phases includes it)
 entry       = "controller.py"
 type        = "pymain"       # only pymain supported today
-prompts     = "anya.loom"    # optional; defaults to anya.loom
+prompts     = "anya.loom.toml"  # optional; defaults to anya.loom.toml
 id          = "..."          # optional; overrides dir name for blotter/email
 select      = 3              # optional; exposed to the controller as ANYA_JOB_SELECT
 ```
@@ -128,7 +128,7 @@ select      = 3              # optional; exposed to the controller as ANYA_JOB_S
 A regular Python program. It runs as a subprocess with these env vars set:
 
 - `ANYA_JOB_ID`, `ANYA_JOB_PATH`
-- `ANYA_PROMPTS_FILE` (resolved path to `anya.loom`)
+- `ANYA_PROMPTS_FILE` (resolved path to `anya.loom.toml`)
 - `ANYA_CONFIG_FILE` (resolved path to `config.toml`, if any)
 - `ANYA_JOB_SELECT` (when `select` is set)
 
@@ -160,7 +160,7 @@ inference(promptid, context, *, model=None, system=None,
 - `response_schema`: optional JSON schema; when set, returns a parsed `dict` (with native backend support where available, post-hoc parse-and-retry as a fallback)
 - `tools=` / `tool_choice=` / `functions=` etc. are **refused** at dispatch time
 
-## `anya.loom` (WordLoom prompts)
+## `anya.loom.toml` (WordLoom prompts)
 
 Standard [WordLoom](https://github.com/OoriData/WordLoom) format. Keys are promptids; `_m` declares template markers. The file/dir/glob inclusion feature is enabled — see the [WordLoom implementation doc](https://github.com/OoriData/WordLoom/blob/main/implementation.md) for how to pull in supporting text without controller boilerplate.
 
@@ -192,8 +192,11 @@ result = await create_fetcher('crawl4ai').fetch('https://reddit.com/...')
 **Fetch methods**:
 
 - `plain` (default) — simple HTTP + ogbujipt
-- `reddit` — rewrites the URL to `old.reddit.com` and sends a real User-Agent; falls back to the URL's `.rss` feed when blocked. Set `REDDIT_USER_AGENT` to override the default UA (Reddit's API guidelines ask the UA to identify your bot)
+- `rss` — RSS/Atom feed via `feedparser`; returns a markdown summary of feed entries
+- `reddit` — rewrites any `*.reddit.com` URL (including `www.`) to `old.reddit.com` and sends a real User-Agent; falls back to the URL's `.rss` feed when blocked. Set `REDDIT_USER_AGENT` to override the default UA (Reddit's API guidelines ask the UA to identify your bot)
 - `crawl4ai` — Crawl4AI service for JS-heavy or bot-blocked sites. Run `docker run -p 11235:11235 unclecode/crawl4ai:basic` and optionally set `CRAWL4AI_BASE_URL`
+
+All GET fetchers share an HTTP cache (hishel, RFC 9111) so we send `If-None-Match` / `If-Modified-Since` on revalidation and honor `Cache-Control` / `Vary` — be a good HTTP citizen. SQLite-backed, default at `data/http-cache.sqlite`; override with `ANYA_HTTP_CACHE=/path/to/cache.sqlite`. Delete the file to clear the cache.
 
 ## Blotter & memory
 

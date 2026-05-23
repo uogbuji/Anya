@@ -6,7 +6,7 @@ A job dir layout:
     job/my-job/
       anya.toml      # job metadata
       controller.py  # entry point (default name; override via anya.toml entry=)
-      anya.loom      # prompts (default name; override via anya.toml prompts=)
+      anya.loom.toml # prompts (default name; override via anya.toml prompts=)
       .env           # optional per-job env
 
 anya.toml fields:
@@ -17,7 +17,7 @@ anya.toml fields:
     phase       = "default"      # default | ignore
     entry       = "controller.py"
     type        = "pymain"       # only pymain is implemented today
-    prompts     = "anya.loom"    # optional
+    prompts     = "anya.loom.toml"  # optional
     id          = "..."          # optional; overrides dir name
     select      = 3              # optional; exposed as ANYA_JOB_SELECT
 '''
@@ -69,7 +69,7 @@ def load_job(path: Path) -> Job | None:
     phase = str(data.get('phase') or 'default').strip().lower() or 'default'
     entry_name = str(data.get('entry') or 'controller.py')
     type_ = str(data.get('type') or 'pymain').strip().lower()
-    prompts_name = str(data.get('prompts') or 'anya.loom')
+    prompts_name = str(data.get('prompts') or 'anya.loom.toml')
 
     if type_ not in _VALID_TYPES:
         raise ValueError(

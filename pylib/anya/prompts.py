@@ -1,7 +1,8 @@
 '''
 WordLoom-backed prompt loading for Anya.
 
-A job's prompts live in a single .loom file (default: anya.loom in the job dir).
+A job's prompts live in a single WordLoom file (default: anya.loom.toml in the
+job dir — `.loom.toml` suffix so editors pick up TOML syntax highlighting).
 Keys in that file are the promptids passed to inference(); values are templates
 rendered with the context dict provided at the call site.
 

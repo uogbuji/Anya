@@ -52,12 +52,12 @@ def _get_config() -> AnyaConfig:
 
 
 def _prompts_path() -> Path:
-    '''Resolve the prompts file path from env, falling back to <job>/anya.loom.'''
+    '''Resolve the prompts file path from env, falling back to <job>/anya.loom.toml.'''
     explicit = os.environ.get('ANYA_PROMPTS_FILE')
     if explicit:
         return Path(explicit)
     job_path = Path(os.environ.get('ANYA_JOB_PATH', '.'))
-    return job_path / 'anya.loom'
+    return job_path / 'anya.loom.toml'
 
 
 async def inference(

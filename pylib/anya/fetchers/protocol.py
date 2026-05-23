@@ -14,6 +14,8 @@ import structlog
 
 from ogbujipt.text.html import clean_html, html2markdown
 
+from anya.fetchers._cache import cached_client
+
 
 logger = structlog.get_logger()
 
@@ -60,7 +62,7 @@ class SimpleHttpFetcher(WebFetcher):
     async def fetch(self, url: str) -> FetchResult:
         '''Fetch URL with httpx and convert HTML to markdown.'''
         try:
-            async with httpx.AsyncClient(
+            async with cached_client(
                 timeout=self.timeout,
                 follow_redirects=self.follow_redirects,
                 verify=False,  # Some sites have SSL issues
@@ -182,6 +184,9 @@ def create_fetcher(fetcher_type: str = 'simple', **kwargs) -> WebFetcher:
     if fetcher_type == 'reddit':
         from anya.fetchers.reddit import RedditFetcher  # local import to avoid cycle
         return RedditFetcher(**kwargs)
+    if fetcher_type == 'rss':
+        from anya.fetchers.rss import RSSFetcher  # local import to avoid cycle
+        return RSSFetcher(**kwargs)
     raise ValueError(f'Unknown fetcher type: {fetcher_type}')
 
 

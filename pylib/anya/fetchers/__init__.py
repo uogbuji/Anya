@@ -10,12 +10,13 @@ from anya.fetchers.protocol import (
     fetch_url,
 )
 from anya.fetchers.reddit import RedditFetcher
-from anya.fetchers.rss import fetch_rss
+from anya.fetchers.rss import RSSFetcher, fetch_rss
 
 __all__ = [
     'Crawl4AIFetcher',
     'FetchResult',
     'RedditFetcher',
+    'RSSFetcher',
     'SimpleHttpFetcher',
     'WebFetcher',
     'create_fetcher',
