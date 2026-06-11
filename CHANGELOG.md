@@ -6,7 +6,7 @@ Notable changes to  Format based on [Keep a Changelog](https://keepachangelog.co
 ## [Unreleased]
 -->
 
-## [0.2.0] - 20260514
+## [0.2.0] - 20260608
 
 - Rearchitect for general workflow shapes: deterministic controller per job + `inference(promptid, context, **kwargs)` library call; prompts moved to WordLoom (`anya.loom.toml` — `.loom.toml` suffix so editors auto-detect TOML); job metadata moved to `anya.toml`.
 - `inference()` is text-in / text-or-JSON-out. Tool-call kwargs (`tools=`, `tool_choice=`, etc.) are refused at dispatch time.
