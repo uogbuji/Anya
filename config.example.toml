@@ -1,0 +1,38 @@
+[models]
+default = "fast"                     # used when inference() omits model=
+
+[models.aliases]
+fast = "or-haiku"
+best-reasoning = "or-opus"
+cheapest = "local-qwen"
+
+# OpenRouter: cloud, broad model menu. `provider = "openrouter"` is sugar
+# that fills in base_url and picks up OPENROUTER_API_KEY from env.
+[models.backends.or-haiku]
+provider = "openrouter"
+model = "anthropic/claude-haiku-4.5"
+
+[models.backends.or-opus]
+provider = "openrouter"
+model = "anthropic/claude-opus-4.7"
+
+[models.backends.or-llama]
+provider = "openrouter"
+model = "meta-llama/llama-3.3-70b-instruct"
+
+# Can select free models from https://openrouter.ai/models?max_price=0&output_modalities=text
+[models.backends.or-deepseek-free]
+provider = "openrouter"
+model = "deepseek/deepseek-v4-flash:free"
+
+# Local: any OpenAI-compatible server. oMLX is the preferred local runner —
+# use a grammar-capable build for native JSON-schema support.
+[models.backends.local-qwen]
+provider = "openai"
+model = "qwen3.6-mlx"
+base_url = "http://localhost:8080/v1"
+
+# Anthropic direct, if you don't want to go through OpenRouter.
+[models.backends.claude-haiku-direct]
+provider = "anthropic"
+model = "claude-haiku-4-5-20251001"

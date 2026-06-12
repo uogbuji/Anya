@@ -1,89 +1,98 @@
 '''
-Job executor: fetch data, run LLM, update blotter/memory, send email.
-Read-only; no destructive actions.
-Supports Anthropic (Claude) and OpenAI-compatible APIs.
+Job executor: spawn a controller (D Python program), capture its stdout as
+the job's report, route through blotter/memory/email.
+
+The controller is the single boundary that talks to inference() and to any
+deterministic side effects. The executor does not call the LLM directly any
+more — that lives in the controller's calls to anya.inference.inference().
 '''
 
+from __future__ import annotations
+
+import asyncio
 import os
-import subprocess
 import sys
 from pathlib import Path
 
-from anya.actions import expand_actions
-from anya.blotter import BlotterLockError, append_blotter, read_blotter_tail
-from anya.email_unosend import send_email
-from anya.llm import LLMConfig, call_llm
-from anya.fetchers import fetch_url
-from anya.fetchers.rss import fetch_rss
-from anya.job.loader import Job, should_run_job
-from anya.memory import append_memory, prune_memory, read_memory
+import structlog
 
-SYSTEM_PROMPT = '''You are a read-only analysis agent. You NEVER take destructive actions.
-You analyze data, summarize findings, and produce reports. You may instruct the system to:
-- Append to the blotter (append-only log)
-- Append to long-term memory (for critical findings only)
-- Send an email report
-
-You must NOT: delete, modify, overwrite, or perform any destructive operation.
-Output your report in the requested format.'''
-
-BLOB_PROMPT = '''
-## Fetched data
-{data}
-
-## Recent blotter entries
-{blotter}
-
-## Long-term memory
-{memory}
-
-## Your task
-Follow the instructions in MAIN.md. Produce a summary report.
-
-**System Issues**: Only report issues that appear to be ongoing (evident in the most recent execution).
-Do NOT report historical issues that have been resolved. If the current run succeeded, do not list
-earlier failures (e.g. missing scripts, path errors) as current system issues.
-
-If there are critical findings that should be remembered long-term, output a block:
----MEMORY---
-<content to append to long-term memory>
----END MEMORY---
-
-If previously stored memory is no longer accurate (e.g. an issue was resolved), output:
----RESOLVED---
-<brief description of what was resolved, to prune from memory>
----END RESOLVED---
-
-Otherwise, just produce the report. The report will be emailed and appended to the blotter.'''
+from anya.blotter import BlotterLockError, append_blotter
+from anya.email import send_email
+from anya.job.loader import Job
+from anya.memory import append_memory, prune_memory
 
 
-async def run_job_py(job: Job) -> str:
+CONTROLLER_TIMEOUT_DEFAULT = 600  # seconds; controllers may do many LLM calls
+
+
+def _final_error_line(stderr: str) -> str:
     '''
-    Run .py files in the job dir. Returns combined stdout. Uses job's .env.
+    Pull the most useful single line from a Python traceback in stderr — the
+    final non-indented, non-empty line (typically ``ExceptionType: message``).
+    Falls back to the last non-blank line if nothing matches.
     '''
-    outputs: list[str] = []
-    for py_file in sorted(job.path.glob('*.py')):
-        if py_file.name.startswith('_'):
-            continue
-        env = os.environ.copy()
-        env.update(job.env)
-        env['ANYA_JOB_ID'] = job.id
-        env['ANYA_JOB_PATH'] = str(job.path.resolve())
-        if job.select is not None:
-            env['ANYA_JOB_SELECT'] = str(job.select)
-        result = subprocess.run(
-            [sys.executable, str(py_file.resolve())],
-            capture_output=True,
-            text=True,
-            cwd=str(job.path.resolve()),
-            env=env,
-            timeout=60,
-        )
-        if result.stdout:
-            outputs.append(f'### {py_file.name}\n{result.stdout}')
-        if result.stderr and result.returncode != 0:
-            outputs.append(f'### {py_file.name} (stderr)\n{result.stderr}')
-    return '\n\n'.join(outputs) if outputs else ''
+    non_empty = [line.rstrip() for line in stderr.splitlines() if line.strip()]
+    if not non_empty:
+        return '(no stderr)'
+    for line in reversed(non_empty):
+        if line and not line[0].isspace():
+            return line.strip()
+    return non_empty[-1].strip()
+
+
+def _parse_blocks(stdout: str) -> tuple[str, str | None, str | None]:
+    '''
+    Pull ---MEMORY--- / ---RESOLVED--- blocks out of the controller's stdout.
+
+    Returns (summary, memory_content, resolved_content). Both block types are
+    optional. The summary has the blocks stripped.
+    '''
+    memory_content: str | None = None
+    resolved_content: str | None = None
+
+    if '---MEMORY---' in stdout and '---END MEMORY---' in stdout:
+        start = stdout.index('---MEMORY---') + len('---MEMORY---')
+        end = stdout.index('---END MEMORY---')
+        memory_content = stdout[start:end].strip() or None
+
+    if '---RESOLVED---' in stdout and '---END RESOLVED---' in stdout:
+        start = stdout.index('---RESOLVED---') + len('---RESOLVED---')
+        end = stdout.index('---END RESOLVED---')
+        resolved_content = stdout[start:end].strip() or None
+
+    summary = stdout.split('---MEMORY---')[0].split('---RESOLVED---')[0].strip()
+    return summary, memory_content, resolved_content
+
+
+async def _run_controller(job: Job, extra_env: dict[str, str], timeout: int) -> tuple[str, str, int]:
+    '''
+    Spawn the controller as a subprocess. Returns (stdout, stderr, returncode).
+    '''
+    env = os.environ.copy()
+    env.update(job.env)
+    env.update(extra_env)
+    env['ANYA_JOB_ID'] = job.id
+    env['ANYA_JOB_PATH'] = str(job.path.resolve())
+    env['ANYA_PROMPTS_FILE'] = str(job.prompts.resolve())
+    if job.select is not None:
+        env['ANYA_JOB_SELECT'] = str(job.select)
+
+    proc = await asyncio.create_subprocess_exec(
+        sys.executable,
+        str(job.entry.resolve()),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        cwd=str(job.path.resolve()),
+        env=env,
+    )
+    try:
+        stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        raise TimeoutError(f'Controller {job.entry.name} exceeded {timeout}s')
+
+    return stdout_b.decode('utf-8', errors='replace'), stderr_b.decode('utf-8', errors='replace'), proc.returncode or 0
 
 
 async def execute_job(
@@ -92,96 +101,41 @@ async def execute_job(
     blotter_path: Path,
     memory_path: Path,
     email_to: list[str],
-    append_only_blotter: bool = True,
-    llm_config: LLMConfig | None = None,
+    config_path: Path | None = None,
     skip_email: bool = False,
+    timeout: int = CONTROLLER_TIMEOUT_DEFAULT,
 ) -> tuple[str, str] | None:
     '''
-    Execute a single job: fetch, LLM, blotter, memory.
+    Execute a single job's controller and route its output.
+
     Returns (job_id, summary) on success, None on failure.
-    Does not send email when skip_email=True; caller may batch and send one.
+    Caller may set skip_email=True to batch emails across jobs.
     '''
-    from tenacity import retry, stop_after_attempt, wait_exponential
-    import structlog
-
     log = structlog.get_logger()
-    log.info('executing job', job_id=job.id)
+    log.info('executing job', job_id=job.id, entry=str(job.entry))
 
-    # Set job env for this process (sandboxed from other jobs)
-    for k, v in job.env.items():
-        os.environ[k] = v
+    extra_env: dict[str, str] = {}
+    if config_path is not None:
+        extra_env['ANYA_CONFIG_FILE'] = str(config_path.resolve())
 
-    # Gather context
-    memory = read_memory(memory_path)
-    if append_only_blotter:
-        blotter = '(empty)'
-    else:
-        blotter_lines = read_blotter_tail(blotter_path, limit=50)
-        blotter = '\n'.join(blotter_lines) if blotter_lines else '(empty)'
+    stdout, stderr, rc = await _run_controller(job, extra_env, timeout)
 
-    # Run job .py scripts if any (read-only data gathering)
-    py_output = await run_job_py(job)
-    data_parts = [py_output] if py_output else []
+    if rc != 0:
+        # User-facing summary: just the final exception line. Full stderr goes
+        # to structlog so the terminal still has the traceback for debugging.
+        summary_line = _final_error_line(stderr)
+        log.error('controller failed', job_id=job.id, returncode=rc, stderr=stderr.strip()[:4000])
+        raise RuntimeError(f'Controller for {job.id!r} exited {rc}: {summary_line}')
 
-    # MAIN.md can specify fetch/rss lines: "fetch: https://..." or "rss: https://..."
-    for line in job.main_md.splitlines():
-        raw = line.strip()
-        low = raw.lower()
-        if low.startswith('fetch:'):
-            url = raw.split(':', 1)[1].strip()
-            if url.startswith('http'):
-                try:
-                    result = await fetch_url(url)
-                    data_parts.append(result.markdown if result.success else f'(fetch failed: {result.error})')
-                except Exception as e:
-                    data_parts.append(f'(fetch failed: {e})')
-        elif low.startswith('rss:'):
-            url = raw.split(':', 1)[1].strip()
-            if url.startswith('http'):
-                try:
-                    data_parts.append(await fetch_rss(url))
-                except Exception as e:
-                    data_parts.append(f'(rss failed: {e})')
+    summary, mem_content, resolved_content = _parse_blocks(stdout)
 
-    data = '\n\n---\n\n'.join(data_parts) if data_parts else '(no fetched data)'
+    if mem_content:
+        append_memory(memory_path, job.id, mem_content)
+    if resolved_content:
+        prune_memory(memory_path, resolved_content)
 
-    # Expand ---ACTION---...---END ACTION--- blocks in MAIN.md
-    main_md_expanded = await expand_actions(job.main_md)
-
-    user_content = f'''# Job: {job.id}
-
-## MAIN.md instructions
-{main_md_expanded}
-''' + BLOB_PROMPT.format(data=data, blotter=blotter, memory=memory)
-
-    cfg = llm_config or LLMConfig.from_env()
-
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
-    async def _call():
-        return await call_llm(SYSTEM_PROMPT, user_content, cfg)
-
-    response = await _call()
-
-    # Parse memory block if present
-    if '---MEMORY---' in response and '---END MEMORY---' in response:
-        start = response.index('---MEMORY---') + len('---MEMORY---')
-        end = response.index('---END MEMORY---')
-        mem_content = response[start:end].strip()
-        if mem_content:
-            append_memory(memory_path, job.id, mem_content)
-
-    # Parse RESOLVED block to prune stale memory
-    if '---RESOLVED---' in response and '---END RESOLVED---' in response:
-        start = response.index('---RESOLVED---') + len('---RESOLVED---')
-        end = response.index('---END RESOLVED---')
-        resolved_content = response[start:end].strip()
-        if resolved_content:
-            prune_memory(memory_path, resolved_content)
-
-    # Blotter (exclude MEMORY and RESOLVED blocks from summary)
-    summary = response.split('---MEMORY---')[0].split('---RESOLVED---')[0].strip()
     try:
-        append_blotter(blotter_path, job.id, summary[:2000])  # truncate for blotter
+        append_blotter(blotter_path, job.id, summary[:2000])
     except BlotterLockError as e:
         summary = f'**System issue**: {e}\n\n---\n\n{summary}'
 

@@ -1,0 +1,20 @@
+# Agent control config for anya. Managed by oori_coding_control.
+
+[project]
+name = 'anya'
+kind = 'python'
+control = 'https://github.com/OoriData/coding-agent-control'
+
+[paths]
+claude = 'CLAUDE.md'
+agents = 'AGENTS.md'
+config = 'agent-control.toml'
+
+[managed]
+# Version of oori_coding_control whose conventions are installed here.
+# Stamped by oori-seed-repo; bumped by oori-sync-repo. Compare against the
+# running package via oori-audit-repo to detect drift.
+version = '0.2.3'
+
+# Skills installed in this repo (updated by oori-seed-repo)
+skills = ['python', 'python-prompting']

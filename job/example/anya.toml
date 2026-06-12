@@ -1,0 +1,7 @@
+title = "Example job"
+description = "Sample job demonstrating controller + WordLoom prompts."
+frequency = "daily"
+phase = "ignore"
+entry = "controller.py"
+type = "pymain"
+prompts = "anya.loom.toml"

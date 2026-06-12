@@ -3,16 +3,17 @@ Main runner: discover jobs, filter by frequency, execute each.
 This is the callback for the scheduler.
 '''
 
+from __future__ import annotations
+
 from datetime import datetime
 from pathlib import Path
 
 import structlog
 
 from anya.blotter import BlotterLockError, append_blotter
-from anya.email_unosend import send_email
+from anya.email import send_email
 from anya.executor import execute_job
 from anya.job.loader import discover_jobs, filter_by_phase, should_run_job
-from anya.llm import LLMConfig
 
 
 async def run_tick(
@@ -21,13 +22,12 @@ async def run_tick(
     memory_path: Path,
     email_to: list[str],
     phases: set[str] | None = None,
-    append_only_blotter: bool = True,
-    llm_config: LLMConfig | None = None,
+    config_path: Path | None = None,
 ) -> None:
     '''
     One tick of the scheduler: run all due jobs.
     phases: include only jobs whose phase is in this set (default: {"default"}).
-    append_only_blotter: if True, do not read blotter for LLM context.
+    config_path: path to Anya config.toml (passed through to controllers).
     Sends one combined email with a section per job (when email_to is set).
     '''
     phases = phases or {'default'}
@@ -38,7 +38,7 @@ async def run_tick(
     due = [j for j in jobs if should_run_job(j, now)]
     log.info('tick', total_jobs=len(jobs), due=len(due), job_dir=str(job_dir))
 
-    sections: list[tuple[str, str]] = []  # (job_id, content)
+    sections: list[tuple[str, str]] = []
     for job in due:
         try:
             result = await execute_job(
@@ -46,8 +46,7 @@ async def run_tick(
                 blotter_path=blotter_path,
                 memory_path=memory_path,
                 email_to=email_to,
-                append_only_blotter=append_only_blotter,
-                llm_config=llm_config,
+                config_path=config_path,
                 skip_email=True,
             )
             if result:

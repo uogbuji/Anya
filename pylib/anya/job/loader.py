@@ -1,5 +1,30 @@
-'''Job loader: discover jobs from job/ dir, parse MAIN.md, .env, frequency.'''
+'''
+Job loader: discover jobs from job/ dir, parse anya.toml, .env, frequency.
 
+A job dir layout:
+
+    job/my-job/
+      anya.toml      # job metadata
+      controller.py  # entry point (default name; override via anya.toml entry=)
+      anya.loom.toml # prompts (default name; override via anya.toml prompts=)
+      .env           # optional per-job env
+
+anya.toml fields:
+
+    title       = "..."          # informational
+    description = "..."          # informational
+    frequency   = "daily"        # daily | weekly | sundays | saturday | weekday
+    phase       = "default"      # default | ignore
+    entry       = "controller.py"
+    type        = "pymain"       # only pymain is implemented today
+    prompts     = "anya.loom.toml"  # optional
+    id          = "..."          # optional; overrides dir name
+    select      = 3              # optional; exposed as ANYA_JOB_SELECT
+'''
+
+from __future__ import annotations
+
+import tomllib
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -7,64 +32,81 @@ from pathlib import Path
 from dotenv import dotenv_values
 
 
+_VALID_TYPES = frozenset({'pymain'})
+
+
 @dataclass
 class Job:
     '''A single job definition.'''
 
-    id: str  # dir name, or id: from frontmatter
+    id: str
     path: Path
-    main_md: str
-    frequency: str  # e.g. 'daily', 'weekly', 'sundays'
-    phase: str  # e.g. 'default', 'ignore'; controls --phases filtering
+    title: str
+    description: str
+    frequency: str
+    phase: str
+    entry: Path
+    type: str
+    prompts: Path
     env: dict[str, str]
-    select: int | None  # optional; e.g. how many items to pick (for random-reminders)
-
-
-def _parse_frequency(main_md: str) -> str:
-    '''Extract frequency from MAIN.md. Looks for lines like "frequency: weekly".'''
-    for line in main_md.splitlines():
-        line = line.strip()
-        if line.lower().startswith('frequency:'):
-            return line.split(':', 1)[1].strip().lower() or 'daily'
-    return 'daily'
-
-
-def _parse_frontmatter(main_md: str) -> dict[str, str]:
-    '''Extract optional YAML-like frontmatter from MAIN.md.'''
-    result: dict[str, str] = {}
-    if not main_md.strip().startswith('---'):
-        return result
-    lines = main_md.splitlines()
-    i = 1
-    while i < len(lines) and lines[i].strip() != '---':
-        line = lines[i]
-        if ':' in line:
-            k, v = line.split(':', 1)
-            result[k.strip().lower()] = v.strip()
-        i += 1
-    return result
+    select: int | None
 
 
 def load_job(path: Path) -> Job | None:
     '''
-    Load a single job from a directory. Returns None if MAIN.md missing.
+    Load a single job from a directory. Returns None if anya.toml missing.
     '''
-    main_file = path / 'MAIN.md'
-    if not main_file.exists():
+    toml_file = path / 'anya.toml'
+    if not toml_file.exists():
         return None
-    main_md = main_file.read_text(encoding='utf-8')
-    fm = _parse_frontmatter(main_md)
-    job_id = fm.get('id', path.name).strip() or path.name
-    frequency = _parse_frequency(main_md)
-    if 'frequency' in fm:
-        frequency = fm['frequency']
-    phase = fm.get('phase', 'default').strip().lower() or 'default'
-    select_raw = fm.get('select', '').strip()
-    select = int(select_raw) if select_raw.isdigit() else None
+    with toml_file.open('rb') as f:
+        data = tomllib.load(f)
+
+    job_id = str(data.get('id') or path.name).strip() or path.name
+    title = str(data.get('title') or job_id)
+    description = str(data.get('description') or '')
+    frequency = str(data.get('frequency') or 'daily').strip().lower() or 'daily'
+    phase = str(data.get('phase') or 'default').strip().lower() or 'default'
+    entry_name = str(data.get('entry') or 'controller.py')
+    type_ = str(data.get('type') or 'pymain').strip().lower()
+    prompts_name = str(data.get('prompts') or 'anya.loom.toml')
+
+    if type_ not in _VALID_TYPES:
+        raise ValueError(
+            f'Job {job_id!r}: unsupported type {type_!r}. Supported: {sorted(_VALID_TYPES)}'
+        )
+
+    entry = path / entry_name
+    if not entry.exists():
+        raise FileNotFoundError(f'Job {job_id!r}: entry file not found: {entry}')
+
+    prompts = path / prompts_name
+
+    select_raw = data.get('select')
+    if isinstance(select_raw, int):
+        select: int | None = select_raw
+    elif isinstance(select_raw, str) and select_raw.strip().isdigit():
+        select = int(select_raw.strip())
+    else:
+        select = None
+
     env_file = path / '.env'
     env = dict(dotenv_values(env_file)) if env_file.exists() else {}
     env = {k: str(v) for k, v in env.items() if v is not None}
-    return Job(id=job_id, path=path, main_md=main_md, frequency=frequency, phase=phase, env=env, select=select)
+
+    return Job(
+        id=job_id,
+        path=path,
+        title=title,
+        description=description,
+        frequency=frequency,
+        phase=phase,
+        entry=entry,
+        type=type_,
+        prompts=prompts,
+        env=env,
+        select=select,
+    )
 
 
 def filter_by_phase(jobs: list[Job], phases: set[str]) -> list[Job]:
@@ -74,7 +116,7 @@ def filter_by_phase(jobs: list[Job], phases: set[str]) -> list[Job]:
 
 def discover_jobs(job_dir: Path) -> list[Job]:
     '''
-    Discover all jobs in job_dir. Each subdir with MAIN.md is a job.
+    Discover all jobs in job_dir. Each subdir with anya.toml is a job.
     '''
     jobs: list[Job] = []
     if not job_dir.exists():
