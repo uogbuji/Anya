@@ -25,6 +25,7 @@ Usage from a controller:
 from __future__ import annotations
 
 import os
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -38,6 +39,16 @@ DEFAULT_SYSTEM_PROMPT = (
     'requested). You do NOT request tool calls and you do NOT take destructive actions. '
     'Follow the task in the user message exactly.'
 )
+
+
+def _augment_system_prompt(sys_prompt: str, now: date) -> str:
+    '''
+    Append the current date to the system prompt. Inference providers don't set
+    it and the model's training prior guesses an earlier year, so any prompt that
+    reasons about time (deadlines, "recent", relative dates) goes wrong without it.
+    Making it ambient here means no job has to plumb the date into its prompts.
+    '''
+    return f'{sys_prompt}\nThe current date is {now.isoformat()}.'
 
 
 _config_cache: AnyaConfig | None = None
@@ -69,6 +80,7 @@ async def inference(
     response_schema: dict | None = None,
     max_tokens: int = 4096,
     temperature: float | None = None,
+    now: date | None = None,
     **extra: Any,
 ) -> str | dict:
     '''
@@ -81,6 +93,9 @@ async def inference(
                 synthesized "default" env-based backend.
     - system:   override the default safety/system prompt
     - response_schema: when given, the call returns a parsed JSON dict
+    - now:      override "today" (defaults to date.today()); the current date is
+                appended to the system prompt so prompts can reason about time.
+                Pass a fixed date for deterministic tests/replay.
     - extra:    forbidden tool-call kwargs raise InferenceProtocolError;
                 anything else is currently ignored
     '''
@@ -89,7 +104,8 @@ async def inference(
     backend: BackendConfig = cfg.resolve(model)
 
     user = render_prompt(_prompts_path(), promptid, context)
-    sys_prompt = system if system is not None else DEFAULT_SYSTEM_PROMPT
+    base_system = system if system is not None else DEFAULT_SYSTEM_PROMPT
+    sys_prompt = _augment_system_prompt(base_system, now or date.today())
 
     return await complete(
         backend,

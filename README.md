@@ -154,13 +154,14 @@ asyncio.run(main())
 
 ```python
 inference(promptid, context, *, model=None, system=None,
-          response_schema=None, max_tokens=4096, temperature=None) -> str | dict
+          response_schema=None, max_tokens=4096, temperature=None, now=None) -> str | dict
 ```
 
 - `promptid`: WordLoom key in the prompts file
 - `context`: template params for the prompt (`str.format` substitution)
 - `model`: alias or backend name from `config.toml`; falls back to the configured default
 - `response_schema`: optional JSON schema; when set, returns a parsed `dict` (with native backend support where available, post-hoc parse-and-retry as a fallback)
+- `now`: overrides "today" (defaults to `date.today()`). The current date is appended to the system prompt on every call — providers don't set it and the model's training prior otherwise guesses an earlier year, so prompts can reason about deadlines / "recent" / relative dates without each job plumbing the date in. Pass a fixed date for deterministic tests.
 - `tools=` / `tool_choice=` / `functions=` etc. are **refused** at dispatch time
 
 ## `anya.loom.toml` (WordLoom prompts)
