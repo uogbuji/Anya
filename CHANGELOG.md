@@ -4,6 +4,9 @@ Notable changes to  Format based on [Keep a Changelog](https://keepachangelog.co
 
 <!--
 ## [Unreleased]
+
+### Added
+- `anya run` / `anya serve`: `--select_jobs` and `--exclude_jobs` (comma-separated job ids) to run or skip specific jobs on top of `--phases`. `--select_jobs` bypasses frequency checks for dev/testing.
 -->
 
 ## [0.2.0] - 20260608

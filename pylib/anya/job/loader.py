@@ -114,6 +114,24 @@ def filter_by_phase(jobs: list[Job], phases: set[str]) -> list[Job]:
     return [j for j in jobs if j.phase in phases]
 
 
+def filter_by_job_ids(
+    jobs: list[Job],
+    *,
+    select: set[str] | None = None,
+    exclude: set[str] | None = None,
+) -> list[Job]:
+    '''
+    Filter jobs by id. select limits to listed ids; exclude removes listed ids.
+    Applied after phase filtering.
+    '''
+    result = jobs
+    if select:
+        result = [j for j in result if j.id in select]
+    if exclude:
+        result = [j for j in result if j.id not in exclude]
+    return result
+
+
 def discover_jobs(job_dir: Path) -> list[Job]:
     '''
     Discover all jobs in job_dir. Each subdir with anya.toml is a job.

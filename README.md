@@ -41,11 +41,12 @@ uv pip install -U .
 4. Run once: `anya run --email_to=you@example.com`
 5. Or serve (daily): `anya serve --email_to=you@example.com --interval=86400`
 6. Run example job too: `anya run --phases=default,ignore`
+7. Dev: run one job (ignores frequency): `anya run --select-jobs=my-job`
 
 In reality I'd use 1password, so
 
 ```
-op run --no-masking --env-file=.env -- anya run --email_to=uche@example.com
+op run --env-file=.env -- anya run --email_to=uche@example.com
 ```
 
 ## LLM providers and `config.toml`
@@ -122,6 +123,8 @@ prompts     = "anya.loom.toml"  # optional; defaults to anya.loom.toml
 id          = "..."          # optional; overrides dir name for blotter/email
 select      = 3              # optional; exposed to the controller as ANYA_JOB_SELECT
 ```
+
+CLI job filters (on top of `--phases`): `--select-jobs=id1,id2` runs only those jobs and bypasses frequency; `--exclude-jobs=id1` skips them.
 
 ## `controller.py`
 
@@ -226,7 +229,3 @@ Default: asyncio loop (`anya serve --scheduler=asyncio`). Optional: `uv pip inst
 - **Synthesized reports** may contain prompt-injected content from upstream web data; that's acceptable for human-read email/blotter output, but worth flagging if downstream agents consume Anya output.
 
 See `job/update-check/controller.py` for the fan-out filter pattern (cheap LLM filter per candidate → synthesis over survivors).
-
-# Conventions
-
-See `AICONTEXT-PYLIB.md` for Python style and tooling.

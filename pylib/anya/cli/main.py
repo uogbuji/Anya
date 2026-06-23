@@ -31,6 +31,12 @@ def _configure_plain_tracebacks() -> None:
     )
 
 
+def _parse_csv_set(value: str) -> set[str] | None:
+    '''Parse comma-separated tokens into a set, or None when empty.'''
+    items = {e.strip() for e in value.split(',') if e.strip()}
+    return items or None
+
+
 def _resolve_config_path(config: str) -> Path | None:
     '''Resolve the config path argument. Empty string → search default locations.'''
     if config:
@@ -59,6 +65,8 @@ def run_once(
     memory: str = 'data/memory.txt',
     email_to: str = '',
     phases: str = 'default',
+    select_jobs: str = '',
+    exclude_jobs: str = '',
     config: str = '',
 ) -> None:
     '''
@@ -70,6 +78,8 @@ def run_once(
     email_to: comma-separated email addresses for reports
     phases: comma-separated phases to include (default: default). Jobs with phase: ignore
       are skipped unless "ignore" is in phases.
+    select_jobs: comma-separated job ids to run (bypasses frequency; for dev/testing)
+    exclude_jobs: comma-separated job ids to skip (after phase and select filters)
     config: path to Anya config.toml (default: ./config.toml if present, else ANYA_CONFIG_FILE env)
     '''
     job_path = Path(job_dir)
@@ -86,6 +96,8 @@ def run_once(
             to_list,
             phases=phase_set,
             config_path=config_path,
+            select_jobs=_parse_csv_set(select_jobs),
+            exclude_jobs=_parse_csv_set(exclude_jobs),
         )
     )
 
@@ -98,6 +110,8 @@ def serve(
     interval: float = 86400,
     scheduler: str = 'asyncio',
     phases: str = 'default',
+    select_jobs: str = '',
+    exclude_jobs: str = '',
     config: str = '',
 ) -> None:
     '''
@@ -110,6 +124,8 @@ def serve(
     to_list = [e.strip() for e in email_to.split(',') if e.strip()]
     phase_set = {p.strip() for p in phases.split(',') if p.strip()}
     config_path = _resolve_config_path(config)
+    select_set = _parse_csv_set(select_jobs)
+    exclude_set = _parse_csv_set(exclude_jobs)
 
     async def tick():
         await run_tick(
@@ -119,6 +135,8 @@ def serve(
             to_list,
             phases=phase_set,
             config_path=config_path,
+            select_jobs=select_set,
+            exclude_jobs=exclude_set,
         )
 
     sched = get_scheduler(kind=scheduler, interval_seconds=interval)
