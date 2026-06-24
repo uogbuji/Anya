@@ -9,6 +9,7 @@ import structlog
 from rich.console import Console
 from rich.panel import Panel
 
+from anya.job.loader import discover_jobs
 from anya.runner import run_tick
 from anya.scheduler import get_scheduler
 
@@ -83,6 +84,14 @@ def run_once(
     config: path to Anya config.toml (default: ./config.toml if present, else ANYA_CONFIG_FILE env)
     '''
     job_path = Path(job_dir)
+
+    # A one-shot run with no jobs is almost always a misconfigured/absent job dir (e.g. a
+    # botched bind mount). Warn rather than refuse — unlike `serve`, a single tick that does
+    # nothing is harmless, and dev may legitimately point at a sparse dir.
+    if not discover_jobs(job_path):
+        structlog.get_logger().warning(
+            'no jobs found; nothing to run', job_dir=str(job_path))
+
     blotter_path = Path(blotter or os.environ.get('BLOTTER_FILE', 'data/blotter.txt'))
     memory_path = Path(memory)
     to_list = [e.strip() for e in email_to.split(',') if e.strip()]
@@ -119,6 +128,19 @@ def serve(
     '''
     console = Console()
     job_path = Path(job_dir)
+
+    # Fail loud on a missing/empty job dir rather than ticking forever doing nothing.
+    # Under containerized deploy the job dir is a bind mount; a botched or absent mount
+    # surfaces here at startup instead of silently running zero jobs (see doc.DEPLOYMENT.md).
+    discovered = discover_jobs(job_path)
+    if not discovered:
+        console.print(Panel(
+            f'No jobs found under [bold]{job_path}/[/bold] — refusing to start.\n'
+            'Each job is a subdirectory containing an anya.toml. If deploying, check that '
+            'the job directory is mounted and populated (ANYA_JOB_DIR / compose volume).',
+            title='Anya: no jobs', border_style='red'))
+        raise SystemExit(2)
+
     blotter_path = Path(blotter or os.environ.get('BLOTTER_FILE', 'data/blotter.txt'))
     memory_path = Path(memory)
     to_list = [e.strip() for e in email_to.split(',') if e.strip()]

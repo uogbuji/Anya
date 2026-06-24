@@ -14,7 +14,6 @@ config = 'agent-control.toml'
 # Version of oori_coding_control whose conventions are installed here.
 # Stamped by oori-seed-repo; bumped by oori-sync-repo. Compare against the
 # running package via oori-audit-repo to detect drift.
-version = '0.2.3'
-
+version = '0.2.4'
 # Skills installed in this repo (updated by oori-seed-repo)
-skills = ['python', 'python-prompting']
+skills = ['python', 'python-prompting', 'onya-graph', 'docker-compose-deploy', 'testing']
