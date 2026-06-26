@@ -7,7 +7,7 @@
 # Compose auto-reads ./.env for the ${VAR} interpolation below. Use `op run` (1Password)
 # or `bws run` (Bitwarden) when .env holds reference URIs instead of secrets.
 #
-# See doc.DEPLOYMENT.md for the full workflow.
+# See doc/DEPLOYMENT.md for the full workflow.
 
 services:
   anya:
@@ -46,7 +46,11 @@ services:
   # Optional. Heavy image; only started with `--profile crawl`. Enable when a job uses the
   # crawl4ai fetcher for JS-heavy / bot-blocked pages. anya reaches it at CRAWL4AI_BASE_URL.
   crawl4ai:
-    image: unclecode/crawl4ai:basic
+    # Pinned by digest so a moved `:basic` tag can't silently change what runs. The tag stays
+    # as a readable label; the digest is what actually gets pulled. To take a newer build later,
+    # re-fetch the digest and replace it here:
+    #   docker buildx imagetools inspect unclecode/crawl4ai:basic
+    image: unclecode/crawl4ai:basic@sha256:576b8cc98724f1c714d8fc7306758531588b1c5f07667700f4fae89d3861ec67
     profiles: ['crawl']
     restart: unless-stopped
     expose:

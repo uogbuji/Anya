@@ -1,14 +1,18 @@
 # syntax=docker/dockerfile:1
 #
 # anya — headless LLM agent runner, packaged for single-host Docker Compose deploy.
-# See doc.DEPLOYMENT.md for the full workflow (remote context, secrets, job selection).
+# See doc/DEPLOYMENT.md for the full workflow (remote context, secrets, job selection).
 
 ############################################################
 # Builder: build the anya wheel and install it (non-editable)
 # into a relocatable venv. We test/ship the real distribution,
 # never an editable / source-on-path install.
 ############################################################
-FROM python:3.12-slim AS builder
+# Base pinned by digest (the multi-arch index, so it still resolves per-platform) for
+# reproducible builds — a moved `3.12-slim` tag can't change the base under us. Keep this
+# digest identical in both stages. To take a newer base, re-fetch and update both:
+#   docker buildx imagetools inspect python:3.12-slim
+FROM python:3.12-slim@sha256:6c4dd321d176d61ea848dc8c73a4f7dbae8f70e0ee48bb411ea2f045b599fa8e AS builder
 
 # Build tooling: build-essential for any sdist-only wheel, git for VCS dependencies
 # (ogbujipt is pinned to git main until release).
@@ -32,7 +36,8 @@ RUN uv venv /opt/venv \
 ############################################################
 # Runtime: slim image with just the venv + selected jobs + config.
 ############################################################
-FROM python:3.12-slim AS runtime
+# Same pinned base as the builder stage above — keep these two digests in sync.
+FROM python:3.12-slim@sha256:6c4dd321d176d61ea848dc8c73a4f7dbae8f70e0ee48bb411ea2f045b599fa8e AS runtime
 
 # Least privilege: run the scheduler as a non-root user that only writes under /app/data.
 RUN useradd --create-home --uid 10001 anya
@@ -50,7 +55,7 @@ WORKDIR /app
 COPY config.toml ./config.toml
 
 # Jobs and persistent state are NOT baked in — they are deployer-curated host content,
-# bind-mounted at runtime (see compose.yml / doc.DEPLOYMENT.md):
+# bind-mounted at runtime (see compose.yml / doc/DEPLOYMENT.md):
 #   /app/job   <- the curated job dir   (anya serve refuses to start if it's empty/missing)
 #   /app/data  <- blotter, memory, HTTP cache, and per-job state (persists across rebuilds)
 # The image is a generic anya runtime; changing jobs is a remount, not a rebuild.

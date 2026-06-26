@@ -131,7 +131,7 @@ def serve(
 
     # Fail loud on a missing/empty job dir rather than ticking forever doing nothing.
     # Under containerized deploy the job dir is a bind mount; a botched or absent mount
-    # surfaces here at startup instead of silently running zero jobs (see doc.DEPLOYMENT.md).
+    # surfaces here at startup instead of silently running zero jobs (see doc/DEPLOYMENT.md).
     discovered = discover_jobs(job_path)
     if not discovered:
         console.print(Panel(

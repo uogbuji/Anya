@@ -170,6 +170,65 @@ rm -f data/http-cache.sqlite        # optional: also re-download instead of reva
 docker restart anya
 ```
 
+## Maintenance
+
+Routine upkeep for the anya stack. Anything **host-wide** — disk hygiene that affects every
+stack on the box, watching for upstream image updates, and supply-chain posture — lives in a
+separate droplet-maintenance guide, because this droplet is shared with other stacks (e.g. the
+Pulse Agent). Read that guide before running any prune or image-update command here: they act
+on the **whole daemon**, not just anya.
+
+### Disk: build cache from repeated rebuilds
+
+Each `docker compose up --build` adds layers to the daemon's build cache; over many deploys
+this dwarfs the images themselves. Diagnose, then reclaim:
+
+```bash
+docker system df                 # if "Build Cache" RECLAIMABLE is large, that's the culprit
+docker builder prune -af         # reclaims build cache ONLY — safe on a shared host
+```
+
+> **Shared host, global blast radius.** `docker builder prune` touches only build cache and is
+> safe. Do **not** reach for `docker system prune -a` (removes every image not tied to a
+> *running* container — can delete another stack's images) or `--volumes` (can wipe named
+> volumes other stacks depend on). anya's own content is bind-mounted host dirs, not named
+> volumes, so a volume prune wouldn't lose anya data — but its neighbors might. The
+> droplet-maintenance guide covers exactly what each prune touches.
+
+### Updating anya
+
+anya is built from local source, so an update is a rebuild — old `anya:latest` images become
+dangling and are reclaimed by the prune above:
+
+```bash
+op run --env-file=.env -- docker compose up -d --build anya
+```
+
+### Updating crawl4ai
+
+crawl4ai is an upstream image referenced by the **mutable** tag `unclecode/crawl4ai:basic` — a
+tag that can change under you, with no signature or digest verification. Pull and restart it
+deliberately, not automatically:
+
+```bash
+op run --env-file=.env -- docker compose --profile crawl pull crawl4ai
+op run --env-file=.env -- docker compose --profile crawl up -d crawl4ai
+```
+
+For why you should pin this (and `anya`'s base) by **digest**, and how to get alerted when a
+newer one ships, see the droplet-maintenance guide's supply-chain section.
+
+### Health & liveness
+
+```bash
+docker ps                        # STATUS column shows healthy / unhealthy / starting
+docker logs -f --tail 100 anya   # scheduler output; tick reports land here
+```
+
+anya's healthcheck is an **image-health** signal (imports cleanly, config parses) — it is *not*
+a server liveness probe, since anya has no inbound port. A persistently `unhealthy` anya means
+a broken build or config, not a hung request.
+
 ## Checklist
 
 - [ ] Remote context created and `docker context use anya-droplet` selected.
