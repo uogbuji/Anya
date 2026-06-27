@@ -21,9 +21,10 @@ dependencies = [
     'python-dotenv>=1.0',
     'feedparser>=6.0',
     'cssutils',  # Used by ogbujipt.text.html for CSS parsing
-    'ogbujipt',  # HTML→Markdown via clean_html, html2markdown
+    # Lightweight HTML→Markdown profile (clean_html, html2markdown) — pinned to git main
+    # until released; the PyPI build dragged in torch/transformers/tiktoken (multi-GB).
+    'ogbujipt @ git+https://github.com/OoriData/OgbujiPT.git@main',
     'selectolax',  # Required by ogbujipt.text.html
-    'tiktoken',  # Required by ogbujipt.text.html
     'wordloom>=0.10.1',  # Prompts file format (anya.loom.toml)
 ]
 
@@ -38,6 +39,10 @@ all = [
 
 [project.scripts]
 anya = 'anya.cli.main:main'
+
+# Allow the git-pinned ogbujipt direct reference until it's released to PyPI.
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.version]
 path = 'pylib/anya/__about__.py'

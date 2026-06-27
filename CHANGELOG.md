@@ -5,9 +5,16 @@ Notable changes to  Format based on [Keep a Changelog](https://keepachangelog.co
 ## [Unreleased]
 
 ### Added
+- Docker Compose deployment for a single host (e.g. a DigitalOcean Droplet via a remote Docker context): `Dockerfile`, `compose.yml`, `.dockerignore`, and `doc/DEPLOYMENT.md`. The image is a generic anya runtime; the job dir (`${ANYA_JOB_DIR:-./job}`) and `data/` are deployer-curated, bind-mounted host content (so jobs change without a rebuild and per-job state persists), `config.toml` is a baked default overridable by a mount, and secrets are injected at runtime (`op run` / `.env`). Optional `crawl4ai` service behind a `crawl` profile.
+- `anya serve` refuses to start (exit 2) when its job directory is missing or empty, instead of ticking forever with zero jobs — surfaces a botched/absent bind mount immediately. `anya run` logs a warning in the same case but still completes (a single empty tick is harmless).
+- `env.example`: template for the deploy `.env` documenting every var `compose.yml` interpolates (LLM keys, email provider, deploy knobs) and both the `op run` (op:// refs) and concrete-value flows. Notes the remote-context `ANYA_JOB_DIR` gotcha (use an absolute path on the remote host).
+- `doc/DEPLOYMENT.md`: a Maintenance section — reclaiming build cache from repeated `--build` (with shared-host prune-safety caveats), updating the anya and crawl4ai images, and reading health/liveness. Defers host-wide concerns (cross-stack disk hygiene, image-upgrade monitoring, supply-chain) to a separate droplet-maintenance guide.
 - `anya run` / `anya serve`: `--select_jobs` and `--exclude_jobs` (comma-separated job ids) to run or skip specific jobs on top of `--phases`. `--select_jobs` bypasses frequency checks for dev/testing.
 
 ### Changed
+- Pin the `python:3.12-slim` base image by digest (the multi-arch index) in both Dockerfile stages, for reproducible builds independent of the mutable tag. Refresh with `docker buildx imagetools inspect python:3.12-slim`.
+- Pin the optional `crawl4ai` image by digest (`unclecode/crawl4ai:basic@sha256:…`) instead of the bare mutable tag, so a moved tag can't change what runs; the tag is kept as a readable label. Refresh with `docker buildx imagetools inspect unclecode/crawl4ai:basic`.
+- Depend on `ogbujipt`'s lightweight HTML→Markdown profile (pinned to git `main` until released, dropping the explicit `tiktoken` dep). The previous PyPI build transitively dragged in `torch`/`transformers`/`tiktoken`, ballooning the deploy image to ~5 GB; it's now ~276 MB. Requires `[tool.hatch.metadata] allow-direct-references` for the git pin.
 - `inference()` now appends the current date to the system prompt on every call (with a `now=` override for deterministic tests/replay). Inference providers don't set the date and the model's training prior guesses an earlier year, so any prompt reasoning about deadlines, recency, or relative dates was silently wrong (e.g. a deadline 4 days out described as "roughly a year out"). Making the date ambient means jobs no longer need to plumb it into their prompts.
 
 ## [0.2.0] - 20260608

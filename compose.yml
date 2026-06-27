@@ -1,0 +1,65 @@
+# anya — single-host Docker Compose deploy (e.g. a DigitalOcean Droplet via remote context).
+#
+#   docker context use anya-droplet                      # target the host (one-time setup in doc)
+#   op run --env-file=.env -- docker compose up -d --build
+#
+# Plain `docker compose up -d --build` also works when ./.env holds concrete values —
+# Compose auto-reads ./.env for the ${VAR} interpolation below. Use `op run` (1Password)
+# or `bws run` (Bitwarden) when .env holds reference URIs instead of secrets.
+#
+# See doc/DEPLOYMENT.md for the full workflow.
+
+services:
+  anya:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: anya:latest
+    restart: unless-stopped
+    # anya is a scheduler/worker, not a server: no inbound port to publish.
+    command:
+      - serve
+      - --interval=${ANYA_INTERVAL:-86400}
+      - --phases=${ANYA_PHASES:-default}
+      - --email_to=${ANYA_EMAIL_TO:-}
+    environment:
+      # --- LLM backends: set only what your config.toml actually resolves to ---
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # --- Email delivery (default provider: resend) ---
+      ANYA_EMAIL_PROVIDER: ${ANYA_EMAIL_PROVIDER:-resend}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM: ${RESEND_FROM:-}
+      # --- Optional crawl4ai service (enable with `--profile crawl`) ---
+      CRAWL4AI_BASE_URL: ${CRAWL4AI_BASE_URL:-http://crawl4ai:11235}
+    volumes:
+      # Deployer-curated job dir. The deploy ships THIS (rsync/git), not the image — change
+      # ANYA_JOB_DIR to point elsewhere on the host. Read-write: jobs write their own state
+      # (e.g. grant-hunter's state.toml) here, so it persists across restarts AND rebuilds.
+      # If this is missing/empty, `anya serve` refuses to start (no silent zero-job run).
+      - ${ANYA_JOB_DIR:-./job}:/app/job
+      # Process-level state — blotter, long-term memory, shared HTTP cache.
+      - ./data:/app/data
+      # To override model backends without a rebuild, also mount your own config:
+      # - ./config.toml:/app/config.toml:ro
+
+  # Optional. Heavy image; only started with `--profile crawl`. Enable when a job uses the
+  # crawl4ai fetcher for JS-heavy / bot-blocked pages. anya reaches it at CRAWL4AI_BASE_URL.
+  crawl4ai:
+    # Pinned by digest so a moved `:basic` tag can't silently change what runs. The tag stays
+    # as a readable label; the digest is what actually gets pulled. To take a newer build later,
+    # re-fetch the digest and replace it here:
+    #   docker buildx imagetools inspect unclecode/crawl4ai:basic
+    image: unclecode/crawl4ai:basic@sha256:576b8cc98724f1c714d8fc7306758531588b1c5f07667700f4fae89d3861ec67
+    profiles: ['crawl']
+    restart: unless-stopped
+    expose:
+      - '11235'
+    healthcheck:
+      # Slim image: use the in-image interpreter, not curl/wget.
+      test: ['CMD', 'python', '-c',
+             "import urllib.request; urllib.request.urlopen('http://localhost:11235/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
