@@ -29,7 +29,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from anya.config import AnyaConfig, BackendConfig, load_config
+from anya.config import AnyaConfig, BackendConfig, get_config
 from anya.llm import InferenceProtocolError, UpstreamAPIError, complete
 from anya.prompts import render_prompt
 
@@ -51,15 +51,9 @@ def _augment_system_prompt(sys_prompt: str, now: date) -> str:
     return f'{sys_prompt}\nThe current date is {now.isoformat()}.'
 
 
-_config_cache: AnyaConfig | None = None
-
-
 def _get_config() -> AnyaConfig:
-    '''Load (and cache) the Anya config for the current process.'''
-    global _config_cache
-    if _config_cache is None:
-        _config_cache = load_config()
-    return _config_cache
+    '''Process-wide Anya config (delegates to the shared, cached accessor).'''
+    return get_config()
 
 
 def _prompts_path() -> Path:

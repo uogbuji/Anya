@@ -3,24 +3,21 @@ Reddit fetcher: hits old.reddit.com with a real User-Agent, falls back to the
 URL's RSS feed when blocked.
 
 Avoids modern reddit.com (heavy JS / aggressive bot blocking) without
-requiring crawl4ai or Playwright. Set REDDIT_USER_AGENT in env to override
-the default UA — Reddit's API rules say the UA should identify the bot.
+requiring crawl4ai or Playwright. Set config.toml [fetch] reddit_user_agent to
+override the default UA — Reddit's API rules say the UA should identify the bot.
 '''
 
 from __future__ import annotations
 
-import os
 import re
 from urllib.parse import urlparse, urlunparse
 
 from ogbujipt.text.html import clean_html, html2markdown
 
+from anya.config import DEFAULT_REDDIT_USER_AGENT as DEFAULT_USER_AGENT, get_config
 from anya.fetchers._cache import cached_client
 from anya.fetchers.protocol import FetchResult, WebFetcher
 from anya.fetchers.rss import fetch_rss
-
-
-DEFAULT_USER_AGENT = 'python:anya:0.2 (by /u/anya)'
 
 _REDDIT_HOST_RE = re.compile(r'^(https?://)(?:[a-z0-9.-]+\.)?reddit\.com', re.IGNORECASE)
 
@@ -46,7 +43,7 @@ class RedditFetcher(WebFetcher):
     '''Reddit-aware fetcher: old.reddit.com with UA → RSS fallback.'''
 
     def __init__(self, user_agent: str | None = None, timeout: float = 30.0):
-        self.user_agent = user_agent or os.environ.get('REDDIT_USER_AGENT', DEFAULT_USER_AGENT)
+        self.user_agent = user_agent or get_config().fetch.reddit_user_agent
         self.timeout = timeout
 
     async def fetch(self, url: str) -> FetchResult:

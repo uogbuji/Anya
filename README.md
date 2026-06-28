@@ -35,11 +35,11 @@ uv pip install -U .
 
 # Quick start
 
-1. Set env. For OpenRouter (preferred): `OPENROUTER_API_KEY=...`. For a local OpenAI-compatible server (e.g. oMLX): `LLM_PROVIDER=openai`, `LLM_MODEL=<model>`, `LLM_BASE_URL=http://localhost:8080/v1`. For Anthropic direct: `ANTHROPIC_API_KEY=...`. Plus email (default Resend): `RESEND_API_KEY=...`, `RESEND_FROM` (e.g. `Anya <anya@yourdomain.com>`).
-2. (Optional) create `config.toml` with model aliases / backend definitions (see below)
+1. Create `config.toml` (copy `config.example.toml`) with at least one model backend. This is **required** — it's the single source of truth for all non-secret settings (model aliases/backends, email recipients/provider/sender, fetcher knobs, paths).
+2. Set **secrets** in env — only API keys live here. Pick the key your backends resolve to: `OPENROUTER_API_KEY` (preferred), `ANTHROPIC_API_KEY`, or `OPENAI_API_KEY`; plus the email provider key (default Resend): `RESEND_API_KEY`. A backend may reference a key in `config.toml` as `api_key = "${OPENROUTER_API_KEY}"` (a literal key there logs a warning).
 3. Create jobs in `job/` — one dir per job, each with `anya.toml` + `controller.py` + `anya.loom.toml`
-4. Run once: `anya run --email_to=you@example.com`
-5. Or serve (daily): `anya serve --email_to=you@example.com --interval=86400`
+4. Run once: `anya run` (recipients come from `config.toml [email] to`; `--email_to=you@example.com` overrides)
+5. Or serve (daily): `anya serve --interval=86400`
 6. Run example job too: `anya run --phases=default,ignore`
 7. Dev: run one job (ignores frequency): `anya run --select-jobs=my-job`
 
@@ -89,7 +89,7 @@ provider = "anthropic"
 model = "claude-haiku-4-5-20251001"
 ```
 
-If no `config.toml` exists, Anya synthesizes a single backend named `default` from env vars (`LLM_PROVIDER` ∈ {`openrouter`, `openai`, `anthropic`}).
+A `config.toml` defining at least one `[models.backends.*]` is **required** — there's no env-var fallback for synthesizing a backend. Anya resolves it from `--config`, then `$ANYA_CONFIG_FILE`, then `./config.toml`. API keys stay in env; reference them in `config.toml` via `${ENV_VAR}` (a literal secret there logs a warning).
 
 | Provider | config.toml | Capability |
 |----------|-------------|------------|
@@ -197,26 +197,26 @@ result = await create_fetcher('crawl4ai').fetch('https://reddit.com/...')
 
 - `plain` (default) — simple HTTP + ogbujipt
 - `rss` — RSS/Atom feed via `feedparser`; returns a markdown summary of feed entries
-- `reddit` — rewrites any `*.reddit.com` URL (including `www.`) to `old.reddit.com` and sends a real User-Agent; falls back to the URL's `.rss` feed when blocked. Set `REDDIT_USER_AGENT` to override the default UA (Reddit's API guidelines ask the UA to identify your bot)
-- `crawl4ai` — Crawl4AI service for JS-heavy or bot-blocked sites. Run `docker run -p 11235:11235 unclecode/crawl4ai:basic` and optionally set `CRAWL4AI_BASE_URL`
+- `reddit` — rewrites any `*.reddit.com` URL (including `www.`) to `old.reddit.com` and sends a real User-Agent; falls back to the URL's `.rss` feed when blocked. Set `config.toml [fetch] reddit_user_agent` to override the default UA (Reddit's API guidelines ask the UA to identify your bot)
+- `crawl4ai` — Crawl4AI service for JS-heavy or bot-blocked sites. Run `docker run -p 11235:11235 unclecode/crawl4ai:basic` and set `config.toml [fetch] crawl4ai_base_url` if not on the default `http://localhost:11235`
 
-All GET fetchers share an HTTP cache (hishel, RFC 9111) so we send `If-None-Match` / `If-Modified-Since` on revalidation and honor `Cache-Control` / `Vary` — be a good HTTP citizen. SQLite-backed, default at `data/http-cache.sqlite`; override with `ANYA_HTTP_CACHE=/path/to/cache.sqlite`. Delete the file to clear the cache.
+All GET fetchers share an HTTP cache (hishel, RFC 9111) so we send `If-None-Match` / `If-Modified-Since` on revalidation and honor `Cache-Control` / `Vary` — be a good HTTP citizen. SQLite-backed, default at `data/http-cache.sqlite`; set `config.toml [paths] http_cache` to relocate. Delete the file to clear the cache.
 
 ## Blotter & memory
 
-- **Blotter** (`data/blotter.txt` by default): append-only log for review. Set `BLOTTER_FILE` env or `--blotter` CLI to share with other agent systems. Uses file locking (`{blotter}.lock`); `BLOTTER_LOCK_TIMEOUT` (default 30s).
-- **Memory** (`data/memory.txt`): long-term; controllers can append via `---MEMORY---` blocks on stdout, or prune resolved issues via `---RESOLVED---` blocks.
+- **Blotter** (`data/blotter.txt` by default): append-only log for review. Set `config.toml [paths] blotter` or `--blotter` CLI to share with other agent systems. Uses file locking (`{blotter}.lock`); `config.toml [blotter] lock_timeout` (default 30s).
+- **Memory** (`data/memory.txt`, or `config.toml [paths] memory`): long-term; controllers can append via `---MEMORY---` blocks on stdout, or prune resolved issues via `---RESOLVED---` blocks.
 
 # Email providers
 
-Email delivery is pluggable. Built-in providers:
+Email delivery is pluggable. Non-secret settings live in `config.toml [email]` (`provider`, `to`, `from`); only the API key is a secret and stays in env. Built-in providers:
 
-| Provider | Env vars | Notes |
-|----------|----------|-------|
-| **resend** (default) | `RESEND_API_KEY`, `RESEND_FROM` | [Resend API](https://resend.com/docs/api-reference/emails/send-email) |
-| **unosend** | `UNOSEND_API_KEY`, `UNOSEND_FROM` | |
+| Provider | Secret (env) | Notes |
+|----------|--------------|-------|
+| **resend** (default) | `RESEND_API_KEY` | [Resend API](https://resend.com/docs/api-reference/emails/send-email) |
+| **unosend** | `UNOSEND_API_KEY` | |
 
-Select with `ANYA_EMAIL_PROVIDER=resend|unosend` (default: `resend`). Add your own by calling `anya.email.register_provider('myprov', send_fn)` where `send_fn` matches the `EmailProvider` protocol — useful for SMTP, SES, etc.
+Select with `config.toml [email] provider = "resend" | "unosend"` (default: `resend`). Add your own by calling `anya.email.register_provider('myprov', send_fn)` where `send_fn` matches the `EmailProvider` protocol — useful for SMTP, SES, etc.
 
 # Scheduler
 

@@ -9,6 +9,7 @@ import structlog
 from rich.console import Console
 from rich.panel import Panel
 
+from anya.config import AnyaConfig, get_config
 from anya.job.loader import discover_jobs
 from anya.runner import run_tick
 from anya.scheduler import get_scheduler
@@ -38,6 +39,13 @@ def _parse_csv_set(value: str) -> set[str] | None:
     return items or None
 
 
+def _resolve_email_to(email_to: str, cfg: AnyaConfig) -> list[str]:
+    '''Report recipients: --email_to (comma-separated) when given, else config.toml [email] to.'''
+    if email_to:
+        return [e.strip() for e in email_to.split(',') if e.strip()]
+    return list(cfg.email.to)
+
+
 def _resolve_config_path(config: str) -> Path | None:
     '''Resolve the config path argument. Empty string → search default locations.'''
     if config:
@@ -63,7 +71,7 @@ def main() -> None:
 def run_once(
     job_dir: str = 'job',
     blotter: str = '',
-    memory: str = 'data/memory.txt',
+    memory: str = '',
     email_to: str = '',
     phases: str = 'default',
     select_jobs: str = '',
@@ -74,9 +82,9 @@ def run_once(
     Run one tick: discover jobs, run due ones, email report.
 
     job_dir: directory containing job subdirs (each with anya.toml)
-    blotter: path to append-only log (default: BLOTTER_FILE env or data/blotter.txt)
-    memory: path to long-term memory
-    email_to: comma-separated email addresses for reports
+    blotter: path to append-only log (default: config.toml [paths] blotter)
+    memory: path to long-term memory (default: config.toml [paths] memory)
+    email_to: comma-separated email addresses for reports (default: config.toml [email] to)
     phases: comma-separated phases to include (default: default). Jobs with phase: ignore
       are skipped unless "ignore" is in phases.
     select_jobs: comma-separated job ids to run (bypasses frequency; for dev/testing)
@@ -92,11 +100,12 @@ def run_once(
         structlog.get_logger().warning(
             'no jobs found; nothing to run', job_dir=str(job_path))
 
-    blotter_path = Path(blotter or os.environ.get('BLOTTER_FILE', 'data/blotter.txt'))
-    memory_path = Path(memory)
-    to_list = [e.strip() for e in email_to.split(',') if e.strip()]
-    phase_set = {p.strip() for p in phases.split(',') if p.strip()}
     config_path = _resolve_config_path(config)
+    cfg = get_config(config_path, reload=True)
+    blotter_path = Path(blotter or cfg.paths.blotter)
+    memory_path = Path(memory or cfg.paths.memory)
+    to_list = _resolve_email_to(email_to, cfg)
+    phase_set = {p.strip() for p in phases.split(',') if p.strip()}
     asyncio.run(
         run_tick(
             job_path,
@@ -114,7 +123,7 @@ def run_once(
 def serve(
     job_dir: str = 'job',
     blotter: str = '',
-    memory: str = 'data/memory.txt',
+    memory: str = '',
     email_to: str = '',
     interval: float = 86400,
     scheduler: str = 'asyncio',
@@ -125,6 +134,8 @@ def serve(
 ) -> None:
     '''
     Run scheduler: tick every interval seconds (default 24h).
+
+    Paths and recipients default to config.toml ([paths]/[email]); CLI flags override.
     '''
     console = Console()
     job_path = Path(job_dir)
@@ -141,11 +152,12 @@ def serve(
             title='Anya: no jobs', border_style='red'))
         raise SystemExit(2)
 
-    blotter_path = Path(blotter or os.environ.get('BLOTTER_FILE', 'data/blotter.txt'))
-    memory_path = Path(memory)
-    to_list = [e.strip() for e in email_to.split(',') if e.strip()]
-    phase_set = {p.strip() for p in phases.split(',') if p.strip()}
     config_path = _resolve_config_path(config)
+    cfg = get_config(config_path, reload=True)
+    blotter_path = Path(blotter or cfg.paths.blotter)
+    memory_path = Path(memory or cfg.paths.memory)
+    to_list = _resolve_email_to(email_to, cfg)
+    phase_set = {p.strip() for p in phases.split(',') if p.strip()}
     select_set = _parse_csv_set(select_jobs)
     exclude_set = _parse_csv_set(exclude_jobs)
 

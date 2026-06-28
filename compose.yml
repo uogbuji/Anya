@@ -21,17 +21,15 @@ services:
       - serve
       - --interval=${ANYA_INTERVAL:-86400}
       - --phases=${ANYA_PHASES:-default}
-      - --email_to=${ANYA_EMAIL_TO:-}
     environment:
-      # --- LLM backends: set only what your config.toml actually resolves to ---
+      # ONLY secrets (API keys) belong here. Every non-secret setting — email
+      # recipients/provider/sender, the crawl4ai URL, fetcher and path knobs — lives in
+      # config.toml (baked into the image, or mounted; see the volumes note below).
+      # --- LLM backends: set only the key your config.toml actually resolves to ---
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      # --- Email delivery (default provider: resend) ---
-      ANYA_EMAIL_PROVIDER: ${ANYA_EMAIL_PROVIDER:-resend}
+      # --- Email delivery secret (provider/sender/recipients are in config.toml [email]) ---
       RESEND_API_KEY: ${RESEND_API_KEY:-}
-      RESEND_FROM: ${RESEND_FROM:-}
-      # --- Optional crawl4ai service (enable with `--profile crawl`) ---
-      CRAWL4AI_BASE_URL: ${CRAWL4AI_BASE_URL:-http://crawl4ai:11235}
     volumes:
       # Deployer-curated job dir. The deploy ships THIS (rsync/git), not the image — change
       # ANYA_JOB_DIR to point elsewhere on the host. Read-write: jobs write their own state
@@ -40,11 +38,14 @@ services:
       - ${ANYA_JOB_DIR:-./job}:/app/job
       # Process-level state — blotter, long-term memory, shared HTTP cache.
       - ./data:/app/data
-      # To override model backends without a rebuild, also mount your own config:
+      # config.toml carries all non-secret settings. The image bakes one; mount your own to
+      # override without a rebuild. When using the crawl profile, that config must set
+      # [fetch] crawl4ai_base_url = "http://crawl4ai:11235" (the service name on this network).
       # - ./config.toml:/app/config.toml:ro
 
   # Optional. Heavy image; only started with `--profile crawl`. Enable when a job uses the
-  # crawl4ai fetcher for JS-heavy / bot-blocked pages. anya reaches it at CRAWL4AI_BASE_URL.
+  # crawl4ai fetcher for JS-heavy / bot-blocked pages. anya reaches it at the URL in
+  # config.toml [fetch] crawl4ai_base_url (set it to http://crawl4ai:11235 for this network).
   crawl4ai:
     # Pinned by digest so a moved `:basic` tag can't silently change what runs. The tag stays
     # as a readable label; the digest is what actually gets pulled. To take a newer build later,

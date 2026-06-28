@@ -3,9 +3,9 @@ Resend email provider. Default for Anya.
 
 API: https://resend.com/docs/api-reference/emails/send-email
 
-Env vars:
-  RESEND_API_KEY   required
-  RESEND_FROM      default sender, e.g. 'Anya <anya@yourdomain.com>'
+Secret (env): RESEND_API_KEY (required).
+Sender comes from config.toml [email] from (passed in as from_addr); falls back to
+a Resend onboarding address.
 '''
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ async def send(
     api_key: str | None = None,
 ) -> dict[str, Any]:
     api_key = api_key or os.environ.get('RESEND_API_KEY')
-    from_addr = from_addr or os.environ.get('RESEND_FROM') or 'Anya <onboarding@resend.dev>'
+    from_addr = from_addr or 'Anya <onboarding@resend.dev>'
     if not api_key:
         raise ValueError('RESEND_API_KEY required for the resend email provider')
 

@@ -87,10 +87,27 @@ op run --env-file=.env -- docker compose up -d --build
 docker compose up -d --build
 ```
 
-Vars consumed (set only what your `config.toml` resolves to): `OPENROUTER_API_KEY`,
-`ANTHROPIC_API_KEY`, `ANYA_EMAIL_PROVIDER`, `RESEND_API_KEY`, `RESEND_FROM`. Deploy knobs:
-`ANYA_JOB_DIR` (host job dir, default `./job`), `ANYA_INTERVAL` (seconds, default 86400),
-`ANYA_PHASES`, `ANYA_EMAIL_TO`.
+`.env`/compose carries **only secrets and deploy knobs** — every non-secret setting (email
+provider/sender/recipients, fetcher URLs, paths) lives in `config.toml`. Secrets (set only
+what your `config.toml` resolves to): `OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`,
+`RESEND_API_KEY`. Deploy knobs: `ANYA_JOB_DIR` (host job dir, default `./job`),
+`ANYA_INTERVAL` (seconds, default 86400), `ANYA_PHASES`.
+
+> **`op run` makes the build/pull progress look "fragmented."** To mask secrets, `op run`
+> pipes the child's stdout/stderr instead of leaving it on your terminal. Compose sees a pipe,
+> not a TTY, and falls back to its **plain** progress renderer — which prints every progress
+> *event* on a new line instead of updating one in place. The result is hundreds of repeated
+> lines like `Extracting 85B` / `Extracting 85B`. It's purely cosmetic: nothing is
+> re-extracting, and the deploy is fine (confirm with `docker compose ps`). Options:
+> - `--no-masking` — drop the pipe so Compose gets a real TTY and clean in-place bars. Safe
+>   for `up -d`, which doesn't echo your secrets anyway. The simplest fix:
+>   `op run --no-masking --env-file=.env -- docker compose up -d --build`
+> - Keep masking but quiet the noise: add `--quiet-pull` (or `--progress quiet`) to the
+>   `docker compose up` command.
+>
+> Note: the SSH `ControlMaster`/`ServerAliveInterval` settings in your `~/.ssh/config` are
+> **not** the cause — multiplexing is the recommended setup for Docker-over-SSH and speeds up
+> the many short sessions Compose opens.
 
 ## Deploy
 
@@ -103,8 +120,7 @@ docker context use anya-droplet
 rsync -a job/  root@<droplet-ip>:<path>/job/    # or maintain a curated dir on the host
 rsync -a data/ root@<droplet-ip>:<path>/data/   # optional: carry over blotter/memory history
 
-ANYA_EMAIL_TO=you@example.com \
-  op run --env-file=.env -- docker compose up -d --build
+op run --env-file=.env -- docker compose up -d --build
 
 # After an anya code/deps change, rebuild the runtime image:
 op run --env-file=.env -- docker compose up -d --build anya
@@ -116,6 +132,42 @@ A bind-mount source the remote daemon can't find is created **empty**, not error
 you skip the job rsync, `anya serve` refuses to start (the fail-loud guard) and an absent
 `data/` simply means "no history yet". Confirm both are populated before relying on a tick.
 
+### Host dir ownership: the mounts must be writable by UID 10001
+
+The container runs the worker as a **non-root user, `anya` (UID 10001)** — least privilege,
+since it only ever writes under `/app/data` and the job dir. The Dockerfile `chown`s `/app`
+to that user at *build* time, **but a bind mount shadows that**: when Compose mounts the
+host's `./data` over `/app/data`, the host directory's ownership and permissions win, and the
+build-time chown is irrelevant. So both mounted dirs must be writable by UID 10001 *on the
+host*.
+
+They usually aren't, because `rsync -a` preserves the **source** UIDs numerically — your
+laptop user, not `10001` — so on the host `data/` and `job/` land owned by some unrelated UID.
+The worker then can't even create its lock file, and every tick dies with:
+
+```
+PermissionError: [Errno 13] Permission denied: 'data/blotter.txt.lock'
+```
+
+Fix it with a throwaway **root** container — no need to SSH in or know the host path, and it
+works even while the worker is crash-looping (overriding the entrypoint sidesteps both
+`anya serve` and its empty-job-dir guard):
+
+```bash
+docker compose run --rm --user root --entrypoint chown anya -R 10001:10001 /app/data /app/job
+docker compose restart anya
+```
+
+Equivalent host-side: SSH to the host and `chown -R 10001:10001` the actual `…/data` and
+`…/job` directories. Re-apply after any step that recreates them with other ownership (a fresh
+host, a new `ANYA_JOB_DIR`, or an rsync that resets ownership).
+
+### Bringing down the containers
+
+```sh
+docker compose down anya
+```
+
 ## Optional: crawl4ai for JS-heavy / bot-blocked fetches
 
 Some jobs use the `crawl4ai` fetcher. It's a heavy image, kept behind a Compose profile:
@@ -124,9 +176,10 @@ Some jobs use the `crawl4ai` fetcher. It's a heavy image, kept behind a Compose 
 op run --env-file=.env -- docker compose --profile crawl up -d --build
 ```
 
-anya reaches it at `CRAWL4AI_BASE_URL` (default `http://crawl4ai:11235`). It has a
-healthcheck; if you want anya to wait for it to be healthy before starting, add to the
-`anya` service:
+anya reaches it at `config.toml [fetch] crawl4ai_base_url` — set this to
+`http://crawl4ai:11235` (the service name on the Compose network) in the baked or mounted
+config. It has a healthcheck; if you want anya to wait for it to be healthy before starting,
+add to the `anya` service:
 
 ```yaml
     depends_on:
@@ -142,7 +195,7 @@ Both bind mounts are host directories, so everything survives restarts **and** i
 rebuilds (rebuilds only replace the runtime, never your content):
 
 - **Process state** — `data/blotter.txt`, `data/memory.txt`, and the shared HTTP cache
-  (`ANYA_HTTP_CACHE=/app/data/http-cache.sqlite`) live under `./data`.
+  (`config.toml [paths]`, defaulting to `data/…` under the `/app` workdir) live under `./data`.
 - **Per-job state** — anything a controller writes into its own job dir (e.g.
   `grant-hunter`'s `state.toml` seen-ledger + long-tail cursor) lives under the mounted
   job dir, so weekly-continuation state just works — no per-job mount gymnastics needed.
@@ -235,5 +288,6 @@ a broken build or config, not a hung request.
 - [ ] The job dir (`./job` or `$ANYA_JOB_DIR`) on the host holds exactly the jobs this host should run.
 - [ ] Secrets come from `op run` / `bws run` / concrete `.env` — never committed, never baked.
 - [ ] `./data` exists on the host (carry over blotter/memory if continuing).
+- [ ] The host `data/` and job dirs are **owned by UID 10001** (the container's `anya` user) — `rsync` leaves them owned by your laptop UID, which the worker can't write to.
 - [ ] crawl4ai started (`--profile crawl`) only if a curated job needs it.
 - [ ] `docker logs -f anya` shows the scheduler started (or the fail-loud "no jobs" message if the mount is wrong) and the first tick ran clean.

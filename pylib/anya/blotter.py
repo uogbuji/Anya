@@ -1,11 +1,12 @@
 '''Append-only log for user review. Never modified, only appended.
 Uses file locking for shared context with other agent systems.'''
 
-import os
 from datetime import datetime
 from pathlib import Path
 
 from filelock import FileLock, Timeout
+
+from anya.config import get_config
 
 
 class BlotterLockError(Exception):
@@ -18,18 +19,15 @@ def _lock_path(blotter_path: Path) -> Path:
 
 
 def _lock_timeout() -> float:
-    '''Lock timeout in seconds (BLOTTER_LOCK_TIMEOUT env, default 30).'''
-    try:
-        return float(os.environ.get('BLOTTER_LOCK_TIMEOUT', '30'))
-    except ValueError:
-        return 30.0
+    '''Lock timeout in seconds (config.toml [blotter] lock_timeout, default 30).'''
+    return get_config().blotter_lock_timeout
 
 
 def append_blotter(blotter_path: Path, job_id: str, entry: str) -> None:
     '''
     Append an entry to the blotter. Format: timestamp, job_id, entry.
     Uses exclusive file lock; raises BlotterLockError if lock cannot be
-    acquired within BLOTTER_LOCK_TIMEOUT seconds.
+    acquired within the configured timeout (config.toml [blotter] lock_timeout).
     '''
     lock_path = _lock_path(blotter_path)
     lock = FileLock(lock_path, timeout=_lock_timeout())

@@ -2,7 +2,11 @@
 
 Notable changes to  Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/). Project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+<!-- 
 ## [Unreleased]
+ -->
+
+## [0.3.0] - 20260628
 
 ### Added
 - Docker Compose deployment for a single host (e.g. a DigitalOcean Droplet via a remote Docker context): `Dockerfile`, `compose.yml`, `.dockerignore`, and `doc/DEPLOYMENT.md`. The image is a generic anya runtime; the job dir (`${ANYA_JOB_DIR:-./job}`) and `data/` are deployer-curated, bind-mounted host content (so jobs change without a rebuild and per-job state persists), `config.toml` is a baked default overridable by a mount, and secrets are injected at runtime (`op run` / `.env`). Optional `crawl4ai` service behind a `crawl` profile.
@@ -12,10 +16,16 @@ Notable changes to  Format based on [Keep a Changelog](https://keepachangelog.co
 - `anya run` / `anya serve`: `--select_jobs` and `--exclude_jobs` (comma-separated job ids) to run or skip specific jobs on top of `--phases`. `--select_jobs` bypasses frequency checks for dev/testing.
 
 ### Changed
+- **Clean split of config from secrets (breaking).** All non-sensitive settings now live in `config.toml`; the environment holds only secrets (API keys). New `config.toml` sections: `[email]` (`provider`/`to`/`from`), `[fetch]` (`crawl4ai_base_url`/`reddit_user_agent`), `[paths]` (`blotter`/`memory`/`http_cache`), `[blotter]` (`lock_timeout`). A process-wide `anya.config.get_config()` accessor is the single way modules read settings. CLI flags (`--email_to`/`--blotter`/`--memory`) still override their `config.toml` defaults. `compose.yml`/`env.example` now carry only secrets + deploy knobs; `config.example.toml` documents the new sections.
+- A `config.toml` defining at least one `[models.backends.*]` is now **required** — the env-only backend synthesis is gone (see Removed). Secrets referenced in `config.toml` via `${ENV_VAR}` still expand; a *literal* secret in a known-secret field (`api_key`) now logs a warning.
 - Pin the `python:3.12-slim` base image by digest (the multi-arch index) in both Dockerfile stages, for reproducible builds independent of the mutable tag. Refresh with `docker buildx imagetools inspect python:3.12-slim`.
 - Pin the optional `crawl4ai` image by digest (`unclecode/crawl4ai:basic@sha256:…`) instead of the bare mutable tag, so a moved tag can't change what runs; the tag is kept as a readable label. Refresh with `docker buildx imagetools inspect unclecode/crawl4ai:basic`.
 - Depend on `ogbujipt`'s lightweight HTML→Markdown profile (pinned to git `main` until released, dropping the explicit `tiktoken` dep). The previous PyPI build transitively dragged in `torch`/`transformers`/`tiktoken`, ballooning the deploy image to ~5 GB; it's now ~276 MB. Requires `[tool.hatch.metadata] allow-direct-references` for the git pin.
 - `inference()` now appends the current date to the system prompt on every call (with a `now=` override for deterministic tests/replay). Inference providers don't set the date and the model's training prior guesses an earlier year, so any prompt reasoning about deadlines, recency, or relative dates was silently wrong (e.g. a deadline 4 days out described as "roughly a year out"). Making the date ambient means jobs no longer need to plumb it into their prompts.
+
+### Removed
+- Non-secret config env vars, now read from `config.toml`: `ANYA_EMAIL_TO`, `ANYA_EMAIL_PROVIDER`, `RESEND_FROM`, `UNOSEND_FROM`, `CRAWL4AI_BASE_URL`, `REDDIT_USER_AGENT`, `BLOTTER_FILE`, `BLOTTER_LOCK_TIMEOUT`, `ANYA_HTTP_CACHE`.
+- Env-var LLM-backend synthesis: `LLM_PROVIDER`, `LLM_MODEL`, `LLM_BASE_URL`, `LLM_API_KEY`, `OPENAI_API_BASE`. Define backends in `config.toml [models.backends.*]` instead. Secret keys are still read from env (`ANTHROPIC_API_KEY`/`OPENROUTER_API_KEY`/`OPENAI_API_KEY`, `RESEND_API_KEY`/`UNOSEND_API_KEY`).
 
 ## [0.2.0] - 20260608
 

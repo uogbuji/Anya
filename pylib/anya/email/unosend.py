@@ -1,9 +1,9 @@
 '''
 Unosend email provider.
 
-Env vars:
-  UNOSEND_API_KEY  required
-  UNOSEND_FROM     default sender, e.g. 'Anya <anya@yourdomain.com>'
+Secret (env): UNOSEND_API_KEY (required).
+Sender comes from config.toml [email] from (passed in as from_addr); falls back to
+'anya@localhost'.
 '''
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ async def send(
     api_key: str | None = None,
 ) -> dict[str, Any]:
     api_key = api_key or os.environ.get('UNOSEND_API_KEY')
-    from_addr = from_addr or os.environ.get('UNOSEND_FROM') or 'anya@localhost'
+    from_addr = from_addr or 'anya@localhost'
     if not api_key:
         raise ValueError('UNOSEND_API_KEY required for the unosend email provider')
 
