@@ -2,7 +2,11 @@
 
 Notable changes to  Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/). Project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+<!-- 
 ## [Unreleased]
+ -->
+
+## [0.3.0] - 20260628
 
 ### Added
 - Docker Compose deployment for a single host (e.g. a DigitalOcean Droplet via a remote Docker context): `Dockerfile`, `compose.yml`, `.dockerignore`, and `doc/DEPLOYMENT.md`. The image is a generic anya runtime; the job dir (`${ANYA_JOB_DIR:-./job}`) and `data/` are deployer-curated, bind-mounted host content (so jobs change without a rebuild and per-job state persists), `config.toml` is a baked default overridable by a mount, and secrets are injected at runtime (`op run` / `.env`). Optional `crawl4ai` service behind a `crawl` profile.
