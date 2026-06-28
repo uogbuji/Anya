@@ -36,3 +36,26 @@ base_url = "http://localhost:8080/v1"
 [models.backends.claude-haiku-direct]
 provider = "anthropic"
 model = "claude-haiku-4-5-20251001"
+
+# --- Everything below is NON-SECRET instance config. Secrets (API keys) stay in env. ---
+
+# Email reports. The provider's API key (RESEND_API_KEY / UNOSEND_API_KEY) lives in env;
+# only non-secret settings belong here.
+[email]
+provider = "resend"                       # "resend" (default) or "unosend"
+to = ["you@example.com"]                  # report recipients (array; CLI --email_to overrides)
+from = "Anya <anya@yourdomain.com>"       # sender address
+
+# Web fetchers.
+[fetch]
+crawl4ai_base_url = "http://localhost:11235"        # for the crawl4ai fetcher (compose: http://crawl4ai:11235)
+reddit_user_agent = "python:anya:0.2 (by /u/anya)"  # Reddit asks the UA to identify your bot
+
+# Filesystem paths (relative to the working dir; CLI flags --blotter/--memory override).
+[paths]
+blotter = "data/blotter.txt"
+memory = "data/memory.txt"
+http_cache = "data/http-cache.sqlite"
+
+[blotter]
+lock_timeout = 30                         # seconds to wait for the blotter file lock

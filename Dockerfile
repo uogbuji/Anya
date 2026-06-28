@@ -44,11 +44,11 @@ RUN useradd --create-home --uid 10001 anya
 
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH" \
-    PYTHONUNBUFFERED=1 \
-    # Shared HTTP cache lives on the persisted data volume (good HTTP citizen across rebuilds).
-    ANYA_HTTP_CACHE=/app/data/http-cache.sqlite
+    PYTHONUNBUFFERED=1
 
 WORKDIR /app
+# The HTTP cache, blotter, and memory default to data/… under this WORKDIR (config.toml
+# [paths]), i.e. /app/data — the persisted volume. Override in config.toml, not via env.
 
 # config.toml is a sensible baked-in default (model aliases/backends the image was built
 # against). Mount your own over /app/config.toml to override without a rebuild.

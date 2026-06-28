@@ -7,16 +7,20 @@ A provider is any async callable matching the EmailProvider protocol:
 
 Built-in providers: 'resend' (default), 'unosend'. Selection:
 1. The `provider=` arg to send_email(), if given.
-2. The `ANYA_EMAIL_PROVIDER` env var.
+2. `config.toml [email] provider`.
 3. Falls back to 'resend'.
+
+The sender address comes from `config.toml [email] from` (or the `from_addr` arg).
+Only the API key is a secret and stays in env (RESEND_API_KEY / UNOSEND_API_KEY).
 
 Register your own with register_provider('myprov', send_fn).
 '''
 
 from __future__ import annotations
 
-import os
-from typing import Any, Awaitable, Callable, Protocol
+from typing import Any, Protocol
+
+from anya.config import get_config
 
 
 class EmailProvider(Protocol):
@@ -51,9 +55,9 @@ def _ensure_builtins_loaded() -> None:
 
 
 def resolve_provider(name: str | None = None) -> tuple[str, EmailProvider]:
-    '''Resolve a provider name (env or explicit) to (name, callable).'''
+    '''Resolve a provider name (explicit arg or config.toml) to (name, callable).'''
     _ensure_builtins_loaded()
-    chosen = (name or os.environ.get('ANYA_EMAIL_PROVIDER') or 'resend').lower()
+    chosen = (name or get_config().email.provider or 'resend').lower()
     if chosen not in _PROVIDERS:
         raise ValueError(
             f'Unknown email provider {chosen!r}. Registered: {sorted(_PROVIDERS)}'
@@ -73,8 +77,9 @@ async def send_email(
     '''
     Send an email via the configured (or explicit) provider.
 
-    Provider-specific env vars (e.g. RESEND_API_KEY, RESEND_FROM) are read by
-    each provider's send function; explicit args here override env.
+    Non-secret settings (provider, sender) come from config.toml [email]; the
+    provider's API key is read from its env var (RESEND_API_KEY / UNOSEND_API_KEY).
+    Explicit args here override both.
     '''
     _, fn = resolve_provider(provider)
     return await fn(
@@ -82,7 +87,7 @@ async def send_email(
         subject=subject,
         html=html,
         text=text,
-        from_addr=from_addr,
+        from_addr=from_addr or get_config().email.from_addr,
         api_key=api_key,
     )
 

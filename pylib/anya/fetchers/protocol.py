@@ -5,7 +5,6 @@ Provides a pluggable interface for different web scraping tools.
 Adapted from WebScout pattern for use in Anya jobs.
 '''
 
-import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
@@ -14,6 +13,7 @@ import structlog
 
 from ogbujipt.text.html import clean_html, html2markdown
 
+from anya.config import get_config
 from anya.fetchers._cache import cached_client
 
 
@@ -106,7 +106,7 @@ class Crawl4AIFetcher(WebFetcher):
     '''
 
     def __init__(self, base_url: str | None = None):
-        self.base_url = (base_url or os.environ.get('CRAWL4AI_BASE_URL', 'http://localhost:11235')).rstrip('/')
+        self.base_url = (base_url or get_config().fetch.crawl4ai_base_url).rstrip('/')
 
     async def fetch(self, url: str) -> FetchResult:
         '''Fetch URL using Crawl4AI service.'''

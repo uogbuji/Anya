@@ -4,20 +4,21 @@ A single SQLite-backed cache shared by all GET fetchers, so we send
 `If-None-Match` / `If-Modified-Since` on revalidation and respect
 `Cache-Control` / `Vary`. Be a good HTTP citizen.
 
-Default path: `data/http-cache.sqlite` (override with `ANYA_HTTP_CACHE`).
+Default path: `data/http-cache.sqlite` (set config.toml [paths] http_cache to override).
 '''
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import hishel
 import hishel.httpx as _hh
 
+from anya.config import get_config
+
 
 def _cache_db_path() -> Path:
-    p = Path(os.environ.get('ANYA_HTTP_CACHE', 'data/http-cache.sqlite'))
+    p = Path(get_config().paths.http_cache)
     p.parent.mkdir(parents=True, exist_ok=True)
     return p
 
