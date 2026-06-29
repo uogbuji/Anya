@@ -64,6 +64,21 @@ def _parse_blocks(stdout: str) -> tuple[str, str | None, str | None]:
     return summary, memory_content, resolved_content
 
 
+def _add_shared_lib_path(env: dict[str, str], job_path: Path) -> dict[str, str]:
+    '''
+    If a `_lib/` directory sits alongside the job dir, prepend the jobs-root to
+    PYTHONPATH so any controller can `from _lib import ...` shared code. Mutates
+    and returns env. Python already puts the controller's own job dir on
+    sys.path[0]; this adds the parent so the shared `_lib` package resolves.
+    '''
+    jobs_root = job_path.resolve().parent
+    if (jobs_root / '_lib').is_dir():
+        existing = env.get('PYTHONPATH', '')
+        parts = [str(jobs_root)] + ([existing] if existing else [])
+        env['PYTHONPATH'] = os.pathsep.join(parts)
+    return env
+
+
 async def _run_controller(job: Job, extra_env: dict[str, str], timeout: int) -> tuple[str, str, int]:
     '''
     Spawn the controller as a subprocess. Returns (stdout, stderr, returncode).
@@ -76,6 +91,7 @@ async def _run_controller(job: Job, extra_env: dict[str, str], timeout: int) -> 
     env['ANYA_PROMPTS_FILE'] = str(job.prompts.resolve())
     if job.select is not None:
         env['ANYA_JOB_SELECT'] = str(job.select)
+    _add_shared_lib_path(env, job.path)
 
     proc = await asyncio.create_subprocess_exec(
         sys.executable,

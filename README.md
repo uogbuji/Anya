@@ -103,12 +103,16 @@ A `config.toml` defining at least one `[models.backends.*]` is **required** — 
 
 ```
 job/
+  _lib/            # optional: shared Python code, importable from any controller
+    hunt.py
   my-job/
     anya.toml      # job metadata
     controller.py  # entry point (D Python program)
     anya.loom.toml # WordLoom prompt file (.loom.toml so editors pick up TOML mode)
     .env           # optional per-job env
 ```
+
+A `_`-prefixed directory under `job/` (by convention `_lib/`) is **shared code, not a job** — job discovery skips it. When a `_lib/` exists, the executor puts the `job/` root on each controller's `PYTHONPATH`, so any controller can `from _lib import hunt` (or whatever modules you put there) to reuse logic across jobs without copy-paste. Like the rest of `job/`, `_lib/` is gitignored by default — handy for keeping job-specific or proprietary helpers out of the repo.
 
 ## `anya.toml`
 

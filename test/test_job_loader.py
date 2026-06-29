@@ -66,3 +66,21 @@ def test_discover_jobs_respects_layout(tmp_path: Path):
         (job_dir / 'controller.py').write_text('print("ok")\n')
     jobs = discover_jobs(tmp_path)
     assert [j.id for j in jobs] == ['alpha', 'beta']
+
+
+def test_discover_jobs_skips_underscore_shared_lib(tmp_path: Path):
+    '''`_lib/` (and other `_`-prefixed dirs) are shared code, not jobs.'''
+    job_dir = tmp_path / 'alpha'
+    job_dir.mkdir()
+    (job_dir / 'anya.toml').write_text('title = "x"\n')
+    (job_dir / 'controller.py').write_text('print("ok")\n')
+
+    # A shared-lib dir that even (mistakenly) carries an anya.toml must not be
+    # discovered as a job.
+    lib_dir = tmp_path / '_lib'
+    lib_dir.mkdir()
+    (lib_dir / 'anya.toml').write_text('title = "not a job"\n')
+    (lib_dir / 'hunt.py').write_text('VALUE = 1\n')
+
+    jobs = discover_jobs(tmp_path)
+    assert [j.id for j in jobs] == ['alpha']

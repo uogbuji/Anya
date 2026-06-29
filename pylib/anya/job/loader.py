@@ -140,7 +140,9 @@ def discover_jobs(job_dir: Path) -> list[Job]:
     if not job_dir.exists():
         return jobs
     for entry in sorted(job_dir.iterdir()):
-        if entry.is_dir() and not entry.name.startswith('.'):
+        # `.`-prefixed dirs are hidden; `_`-prefixed dirs (e.g. `_lib/`) are
+        # shared code referenced by controllers, not jobs themselves.
+        if entry.is_dir() and not entry.name.startswith(('.', '_')):
             job = load_job(entry)
             if job:
                 jobs.append(job)

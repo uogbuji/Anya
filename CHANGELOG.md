@@ -2,9 +2,10 @@
 
 Notable changes to  Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/). Project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-<!-- 
 ## [Unreleased]
- -->
+
+### Added
+- Shared code across jobs via `job/_lib/`. A `_`-prefixed directory under `job/` is treated as shared code, not a job (discovery skips it), and when a `_lib/` is present the executor prepends the `job/` root to each controller's `PYTHONPATH` so any controller can `from _lib import ...` to reuse logic without copy-paste. Gitignored by default like the rest of `job/`, so it doubles as a home for proprietary helpers kept out of the repo.
 
 ## [0.3.0] - 20260628
 
