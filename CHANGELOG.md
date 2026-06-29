@@ -5,6 +5,7 @@ Notable changes to  Format based on [Keep a Changelog](https://keepachangelog.co
 ## [Unreleased]
 
 ### Added
+- Web search ("SERP") fetchers in `anya.fetchers`: `search_web(query, provider=...)` / `create_searcher(provider)` with **tavily** and **brave** providers. A searcher takes a query (not a URL) and returns a `FetchResult` whose markdown lists each result's title/URL/snippet — so search results feed the same extract→validate pipeline as page fetchers, with the result URLs serving as the allow-list. Keys are secrets in env (`TAVILY_API_KEY` / `BRAVE_API_KEY`); result counts are non-secret config (`config.toml [fetch] tavily_max_results` / `brave_max_results`, default 10). A missing key is a soft failure (logged warning, `success=False`) rather than a crash. Reddit needs no new searcher — point the existing `reddit` fetcher at a subreddit search URL.
 - Shared code across jobs via `job/_lib/`. A `_`-prefixed directory under `job/` is treated as shared code, not a job (discovery skips it), and when a `_lib/` is present the executor prepends the `job/` root to each controller's `PYTHONPATH` so any controller can `from _lib import ...` to reuse logic without copy-paste. Gitignored by default like the rest of `job/`, so it doubles as a home for proprietary helpers kept out of the repo.
 
 ## [0.3.0] - 20260628

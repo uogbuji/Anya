@@ -33,6 +33,8 @@ config.toml layout:
     [fetch]
     crawl4ai_base_url = "http://localhost:11235"        # was CRAWL4AI_BASE_URL
     reddit_user_agent = "python:anya:0.2 (by /u/anya)"  # was REDDIT_USER_AGENT
+    tavily_max_results = 10                             # search fetcher (TAVILY_API_KEY in env)
+    brave_max_results = 10                              # search fetcher (BRAVE_API_KEY in env)
 
     [paths]
     blotter = "data/blotter.txt"            # was BLOTTER_FILE
@@ -99,10 +101,12 @@ class EmailConfig:
 
 @dataclass(frozen=True)
 class FetchConfig:
-    '''Non-secret fetcher knobs.'''
+    '''Non-secret fetcher knobs (search API keys stay in env: TAVILY_API_KEY / BRAVE_API_KEY).'''
 
     crawl4ai_base_url: str = DEFAULT_CRAWL4AI_BASE_URL
     reddit_user_agent: str = DEFAULT_REDDIT_USER_AGENT
+    tavily_max_results: int = 10
+    brave_max_results: int = 10
 
 
 @dataclass(frozen=True)
@@ -224,9 +228,12 @@ def _parse_email(data: dict) -> EmailConfig:
 
 def _parse_fetch(data: dict) -> FetchConfig:
     section = data.get('fetch', {})
+    defaults = FetchConfig()
     return FetchConfig(
         crawl4ai_base_url=str(section.get('crawl4ai_base_url', DEFAULT_CRAWL4AI_BASE_URL)),
         reddit_user_agent=str(section.get('reddit_user_agent', DEFAULT_REDDIT_USER_AGENT)),
+        tavily_max_results=int(section.get('tavily_max_results', defaults.tavily_max_results)),
+        brave_max_results=int(section.get('brave_max_results', defaults.brave_max_results)),
     )
 
 
