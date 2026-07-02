@@ -2,7 +2,11 @@
 
 Notable changes to  Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/). Project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+<!-- 
 ## [Unreleased]
+ -->
+
+## [0.3.1] - 20260702
 
 ### Added
 - `anya fetch <target> [--method plain] [--config path]`: exercise a single source/method and print the fetcher's markdown to stdout — an eye test for exactly what a job receives from a source before any LLM extraction. `--method` covers the fetch methods (`plain` (default) | `crawl4ai` | `reddit` | `rss`, `target` is a URL) and the search methods (`tavily` | `brave`, `target` is a query), dispatching like a job does (`create_fetcher`/`create_searcher`) and reading `crawl4ai_base_url`/result counts/UA from `config.toml`. Only `result.markdown` goes to stdout (pipeable); a status line (method, source, title, length, ok/FAILED) goes to stderr, and a failed fetch exits 1. Noisy CSS-parser warnings from HTML cleaning are silenced for a clean read.
