@@ -45,10 +45,10 @@ anya = 'anya.cli.main:main'
 allow-direct-references = true
 
 [tool.hatch.version]
-path = 'pylib/anya/__about__.py'
+path = 'pylib/__about__.py'
 
 [tool.hatch.build.targets.wheel]
-packages = ['pylib/anya']
+only-include = ['pylib']
 
 [tool.hatch.build.sources]
-'pylib/anya' = 'anya'
+'pylib' = 'anya'
