@@ -122,11 +122,24 @@ rsync -a data/ root@<droplet-ip>:<path>/data/   # optional: carry over blotter/m
 
 op run --env-file=.env -- docker compose up -d --build
 
+# rsync preserves YOUR UID, but the worker runs as UID 10001 and must write per-job state.
+# Chown the host dirs to 10001 via a throwaway root container — no host path needed, and it
+# works even while the worker is crash-looping on the permission error. Re-run after every sync.
+docker compose run --rm --user root --entrypoint chown anya -R 10001:10001 /app/job /app/data
+docker compose restart anya
+
 # After an anya code/deps change, rebuild the runtime image:
 op run --env-file=.env -- docker compose up -d --build anya
-# After only a job change, no rebuild — just re-sync the job dir and restart:
-rsync -a job/ root@<droplet-ip>:<path>/job/ && docker compose restart anya
+# After only a job change, no rebuild — re-sync, re-chown, restart:
+rsync -a job/ root@<droplet-ip>:<path>/job/ \
+  && docker compose run --rm --user root --entrypoint chown anya -R 10001:10001 /app/job \
+  && docker compose restart anya
 ```
+
+> **One-step alternative (rsync 3.1+ only):** `rsync -a --chown=10001:10001 job/ …` sets the
+> ownership during transfer, so you can drop the separate chown. Heads-up: **stock macOS ships
+> rsync 2.6.9, which has no `--chown`** (you'll get `unrecognized option`) — install a current
+> rsync (3.1+) yourself, or just keep the portable post-rsync chown above; it works with any rsync.
 
 A bind-mount source the remote daemon can't find is created **empty**, not errored — so if
 you skip the job rsync, `anya serve` refuses to start (the fail-loud guard) and an absent
@@ -162,10 +175,25 @@ Equivalent host-side: SSH to the host and `chown -R 10001:10001` the actual `…
 `…/job` directories. Re-apply after any step that recreates them with other ownership (a fresh
 host, a new `ANYA_JOB_DIR`, or an rsync that resets ownership).
 
+Re-run the chown after every job re-sync (the deploy commands above do). If you have rsync
+3.1+, `rsync -a --chown=10001:10001 …` sets ownership during transfer in one step so you can
+skip it — but **stock macOS ships rsync 2.6.9, which rejects `--chown`** (`unrecognized
+option`). Install a current rsync (3.1+) yourself if you want that, otherwise stick with the
+post-rsync chown, which works with any rsync.
+
 ### Bringing down the containers
 
 ```sh
 docker compose down anya
+```
+
+You can sometimes have a stale container reference ("Error response from daemon: failed to set up container networking: network xyz not found"). This can require a full teardown of the project's network and containers, then up:
+
+One reminder for the crawl profile specifically: with the config refactor, the crawl4ai URL is no longer the `CRAWL4AI_BASE_URL` env var — make sure the baked/mounted `config.toml` has `[fetch] crawl4ai_base_url = "http://crawl4ai:11235"` so anya reaches the service on the Compose network.
+
+```sh
+op run --env-file=.env -- docker compose --profile crawl down --remove-orphans
+op run --env-file=.env -- docker compose --profile crawl up -d --build
 ```
 
 ## Optional: crawl4ai for JS-heavy / bot-blocked fetches
@@ -288,6 +316,6 @@ a broken build or config, not a hung request.
 - [ ] The job dir (`./job` or `$ANYA_JOB_DIR`) on the host holds exactly the jobs this host should run.
 - [ ] Secrets come from `op run` / `bws run` / concrete `.env` — never committed, never baked.
 - [ ] `./data` exists on the host (carry over blotter/memory if continuing).
-- [ ] The host `data/` and job dirs are **owned by UID 10001** (the container's `anya` user) — `rsync` leaves them owned by your laptop UID, which the worker can't write to.
+- [ ] The host `data/` and job dirs are **owned by UID 10001** (the container's `anya` user) — plain `rsync -a` leaves them owned by your laptop UID, which the worker can't write to; chown after each sync (throwaway root container, or `ssh … chown -R 10001:10001`), or `rsync --chown=10001:10001` if you have rsync 3.1+ (not stock macOS).
 - [ ] crawl4ai started (`--profile crawl`) only if a curated job needs it.
 - [ ] `docker logs -f anya` shows the scheduler started (or the fail-loud "no jobs" message if the mount is wrong) and the first tick ran clean.
