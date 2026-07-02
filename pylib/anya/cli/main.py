@@ -10,9 +10,15 @@ from rich.console import Console
 from rich.panel import Panel
 
 from anya.config import AnyaConfig, get_config
+from anya.fetchers import create_fetcher, create_searcher
 from anya.job.loader import discover_jobs
 from anya.runner import run_tick
 from anya.scheduler import get_scheduler
+
+
+# Methods that take a query (create_searcher) rather than a URL (create_fetcher);
+# mirrors the split in job/_lib/prospect.py so `anya fetch` dispatches like a job does.
+SEARCH_METHODS = {'tavily', 'brave'}
 
 
 def _configure_plain_tracebacks() -> None:
@@ -65,6 +71,7 @@ def main() -> None:
     fire.Fire({
         'run': run_once,
         'serve': serve,
+        'fetch': fetch,
     })
 
 
@@ -189,3 +196,48 @@ async def _serve(scheduler) -> None:
         pass
     finally:
         await scheduler.stop()
+
+
+def fetch(
+    target: str,
+    method: str = 'plain',
+    config: str = '',
+) -> None:
+    '''
+    Fetch one source and print the fetcher's markdown to stdout — an eye test for
+    what a job actually receives from a source/method (before any LLM extraction).
+
+    target: a URL (for fetch methods) or a search query (for search methods)
+    method: plain | crawl4ai | reddit | rss (fetch a URL)
+            | tavily | brave (search a query). Default: plain.
+    config: path to Anya config.toml (default: ./config.toml if present, else ANYA_CONFIG_FILE env).
+      Supplies crawl4ai_base_url, result counts, reddit UA, etc.
+
+    Only result.markdown goes to stdout (pipeable); a status line (method, url,
+    title, success/error, length) goes to stderr. Exits 1 if the fetch failed.
+    '''
+    method = method.strip().lower()
+    # HTML cleaning spews per-rule CSS parser warnings on stderr; silence them so the
+    # eye-test's own status line and content stay readable.
+    import logging
+    logging.getLogger('CSSUTILS').setLevel(logging.CRITICAL)
+    # Load config so the fetchers see crawl4ai_base_url / result counts / UA from config.toml.
+    get_config(_resolve_config_path(config), reload=True)
+
+    err = Console(stderr=True)
+    if method in SEARCH_METHODS:
+        result = asyncio.run(create_searcher(method).search(target))
+    else:
+        result = asyncio.run(create_fetcher(method).fetch(target))
+
+    status = '[green]ok[/green]' if result.success else f'[red]FAILED[/red]: {result.error}'
+    err.print(
+        f'[bold]method[/bold]={method}  [bold]source[/bold]={result.url}\n'
+        f'[bold]title[/bold]={result.title!r}  [bold]len[/bold]={len(result.markdown)} chars  {status}',
+        highlight=False,
+    )
+    # Full markdown to stdout, exactly as the job would receive it (jobs then truncate
+    # for extraction; here you see everything the fetcher returned).
+    print(result.markdown)
+    if not result.success:
+        raise SystemExit(1)

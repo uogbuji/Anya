@@ -206,6 +206,26 @@ result = await create_fetcher('crawl4ai').fetch('https://reddit.com/...')
 
 All GET fetchers share an HTTP cache (hishel, RFC 9111) so we send `If-None-Match` / `If-Modified-Since` on revalidation and honor `Cache-Control` / `Vary` — be a good HTTP citizen. SQLite-backed, default at `data/http-cache.sqlite`; set `config.toml [paths] http_cache` to relocate. Delete the file to clear the cache.
 
+### Search ("SERP") fetchers
+
+For jobs that discover pages by **searching** rather than crawling a fixed listing, `anya.fetchers` also exposes query-based searchers. They take a query (not a URL) and return a `FetchResult` whose markdown lists each result's title, URL, and snippet — which drops straight into the same extract→validate pipeline (the result URLs serve as the allow-list).
+
+```python
+from anya.fetchers import search_web, create_searcher
+
+result = await search_web('SMBs hiring RevOps mentioning HubSpot', provider='tavily')
+# or: result = await create_searcher('brave').search('...')
+```
+
+| Provider | Secret (env) | Result-count knob (`config.toml [fetch]`) |
+|----------|--------------|-------------------------------------------|
+| **tavily** | `TAVILY_API_KEY` | `tavily_max_results` (default 10) |
+| **brave** | `BRAVE_API_KEY` | `brave_max_results` (default 10) |
+
+A missing key is a soft failure (`success=False` with a logged warning), not a crash — so one unconfigured provider doesn't abort a multi-source run. Searchers don't use the shared HTTP cache (search results are time-sensitive and metered per call).
+
+For **Reddit** as a query source, no special searcher is needed: point the existing `reddit` fetcher at a search URL (e.g. `https://www.reddit.com/r/RevOps/search?q=hubspot&restrict_sr=1&sort=new`) — it rewrites to `old.reddit.com` and falls back to the `.rss` of that search.
+
 ## Blotter & memory
 
 - **Blotter** (`data/blotter.txt` by default): append-only log for review. Set `config.toml [paths] blotter` or `--blotter` CLI to share with other agent systems. Uses file locking (`{blotter}.lock`); `config.toml [blotter] lock_timeout` (default 30s).
