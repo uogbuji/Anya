@@ -7,13 +7,20 @@
 - Validate changes with the fast unit-test run before reporting completion. Add test cases if needed. Tests that hit unowned code or live services (DB, HTTP, browser) are integration tests — mark them and keep them out of the default run. See the `testing` skill.
 - Ask before making destructive or hard-to-reverse changes.
 - When creating directories to be populated with files, e.g. documents or tests, prefer the singular, e.g. `doc` and `test`. Similar for DB entity names.
-- If a `CHANGELOG.md` exists, keep it current: add an entry under the appropriate `[Unreleased]` subsection (Added/Changed/Removed/Fixed) for any user-visible change. If unsure which version stanza an entry belongs in (e.g. a change spanning a release boundary), ask.
+- If a `CHANGELOG.md` exists, keep it current: add an entry under the appropriate `[Unreleased]` subsection (per [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/): Added/Changed/Deprecated/Removed/Fixed/Security) for any user-visible change. If unsure which version stanza an entry belongs in (e.g. a change spanning a release boundary), ask.
+- `AGENTS.md` and `CLAUDE.md` are companions. `oori-sync-repo` keeps the managed blocks aligned, but the non-managed sections are **not** mirrored — when you edit a non-managed section here (e.g. Local context), make the equivalent edit in `CLAUDE.md` (and vice versa).
 <!-- END MANAGED:agent-preamble -->
 
 ## Project type: python
 
 <!-- BEGIN MANAGED:python-core -->
-For Python library/backend work, load `.claude/skills/python/SKILL.md` — covers conventions, packaging, testing, and tooling.
+**Load `.claude/skills/python/SKILL.md` before editing or testing any Python code** — first, every time; don't reconstruct the dev loop from memory. It covers conventions, packaging, testing, and tooling.
+
+Packaging tripwire: the interpreter runs the *installed* package, not your working tree, and library code is installed **non-editably** — so source edits are invisible until you reinstall. After changing package source, reinstall before running tests or the CLI, or you will test stale code. The skill has the exact command (use `--reinstall-package`, not `-U`) and the `uv`/hatchling specifics.
+
+For Python projects that send prompts to an LLM, load `.claude/skills/python-prompting/SKILL.md` — WordLoom-based declarative prompt/code separation, shared loader pattern, file-inclusion conventions.
+
+For Python projects that depend on [Onya](https://github.com/OoriData/Onya) and author knowledge graphs as Onya Literate (`.onya`) files, load `.claude/skills/onya-graph/SKILL.md` — docheader, node/edge/property syntax, CURIEs, nested/reified assertions, and validation by parsing.
 
 <!-- END MANAGED:python-core -->
 

@@ -27,11 +27,17 @@ The controller author bears the responsibility of treating inference output as *
 
 # Install
 
+Requires Python 3.14+.
+
 ```bash
-uv init
+uv venv --python 3.14
 source .venv/bin/activate
-uv pip install -U .
+uv pip install .
 ```
+
+Anya installs as a real (non-editable) package, so after changing anything under `pylib/`, reinstall before running: `uv pip install --reinstall-package anya .`
+
+To run the tests: `uv pip install '.[test]'`, then `pytest`. The default run is unit-only; tests marked `integration` (live services) run with `pytest -m integration`.
 
 # Quick start
 

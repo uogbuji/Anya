@@ -9,10 +9,10 @@
 # never an editable / source-on-path install.
 ############################################################
 # Base pinned by digest (the multi-arch index, so it still resolves per-platform) for
-# reproducible builds — a moved `3.12-slim` tag can't change the base under us. Keep this
+# reproducible builds — a moved `3.14-slim` tag can't change the base under us. Keep this
 # digest identical in both stages. To take a newer base, re-fetch and update both:
-#   docker buildx imagetools inspect python:3.12-slim
-FROM python:3.12-slim@sha256:6c4dd321d176d61ea848dc8c73a4f7dbae8f70e0ee48bb411ea2f045b599fa8e AS builder
+#   docker buildx imagetools inspect python:3.14-slim
+FROM python:3.14-slim@sha256:9aaa474097d094040649f2162a627c0049b408f52138d980916788d80f04802f AS builder
 
 # Build tooling: build-essential for any sdist-only wheel, git for VCS dependencies
 # (ogbujipt is pinned to git main until release).
@@ -37,7 +37,7 @@ RUN uv venv /opt/venv \
 # Runtime: slim image with just the venv + selected jobs + config.
 ############################################################
 # Same pinned base as the builder stage above — keep these two digests in sync.
-FROM python:3.12-slim@sha256:6c4dd321d176d61ea848dc8c73a4f7dbae8f70e0ee48bb411ea2f045b599fa8e AS runtime
+FROM python:3.14-slim@sha256:9aaa474097d094040649f2162a627c0049b408f52138d980916788d80f04802f AS runtime
 
 # Least privilege: run the scheduler as a non-root user that only writes under /app/data.
 RUN useradd --create-home --uid 10001 anya

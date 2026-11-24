@@ -19,6 +19,13 @@ from typing import Any
 from anya.config import BackendConfig
 
 
+# Neither SDK's own default (600s) is a safe wait inside a job whose executor
+# also kills the whole controller at 600s: a single stalled upstream request
+# would silently eat the job's entire time budget with no error surfaced.
+# Well under that ceiling, so a hang fails fast as UpstreamAPIError instead.
+REQUEST_TIMEOUT = 90.0
+
+
 _DISALLOWED_KWARGS = frozenset({
     'tools',
     'tool_choice',
@@ -135,9 +142,9 @@ async def _anthropic(
     max_tokens: int,
     temperature: float | None,
 ) -> str | dict:
-    from anthropic import APIStatusError, AsyncAnthropic
+    from anthropic import APIStatusError, APITimeoutError, AsyncAnthropic
 
-    client = AsyncAnthropic(api_key=backend.api_key)
+    client = AsyncAnthropic(api_key=backend.api_key, timeout=REQUEST_TIMEOUT)
     params: dict[str, Any] = {
         'model': backend.model,
         'max_tokens': max_tokens,
@@ -164,6 +171,8 @@ async def _anthropic(
             tools=[tool],
             tool_choice={'type': 'tool', 'name': tool_name},
         )
+    except APITimeoutError as e:
+        raise UpstreamAPIError(f'{backend.name} (anthropic): request timed out after {REQUEST_TIMEOUT}s') from e
     except APIStatusError as e:
         raise _wrap_anthropic_error(backend, e) from None
 
@@ -183,7 +192,7 @@ async def _openai(
     max_tokens: int,
     temperature: float | None,
 ) -> str | dict:
-    from openai import APIStatusError, AsyncOpenAI
+    from openai import APIStatusError, APITimeoutError, AsyncOpenAI
 
     if not backend.model:
         raise ValueError(f'Backend {backend.name!r}: model is required for OpenAI-compatible provider')
@@ -191,6 +200,7 @@ async def _openai(
     client = AsyncOpenAI(
         base_url=backend.base_url,
         api_key=backend.api_key or 'not-needed',
+        timeout=REQUEST_TIMEOUT,
     )
     params: dict[str, Any] = {
         'model': backend.model,
@@ -233,6 +243,9 @@ async def _openai(
         retry_params['response_format'] = schema_params['response_format']
         resp = await client.chat.completions.create(**retry_params)
         raw = resp.choices[0].message.content or ''
+    except APITimeoutError as e:
+        raise UpstreamAPIError(f'{backend.name} via {backend.base_url or "(openai)"}: '
+                                f'request timed out after {REQUEST_TIMEOUT}s') from e
     except APIStatusError as e:
         raise _wrap_openai_error(backend, e) from None
 

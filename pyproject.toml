@@ -7,7 +7,7 @@ name = 'anya'
 dynamic = ['version']
 description = 'Headless LLM agent runner: scheduled jobs, skills/flows, email reports, blotter (Claude, OpenAI-compatible)'
 readme = 'README.md'
-requires-python = '>=3.12'
+requires-python = '>=3.14'
 dependencies = [
     'anthropic>=0.50',
     'filelock>=3.15',
@@ -24,18 +24,16 @@ dependencies = [
     # Lightweight HTML→Markdown profile (clean_html, html2markdown) — pinned to git main
     # until released; the PyPI build dragged in torch/transformers/tiktoken (multi-GB).
     'ogbujipt @ git+https://github.com/OoriData/OgbujiPT.git@main',
-    'selectolax',  # Required by ogbujipt.text.html
+    # Required by ogbujipt.text.html, which still imports the Modest backend (selectolax.parser)
+    # that selectolax 1.0 removed. Lift the cap once OgbujiPT moves to selectolax.lexbor.
+    'selectolax>=0.3,<1',
     'wordloom>=0.10.1',  # Prompts file format (anya.loom.toml)
 ]
 
 [project.optional-dependencies]
-scheduler-apscheduler = ['apscheduler>=3.10']
-scheduler-cron = ['python-crontab>=3.0']
-scheduler-schedule = ['schedule>=2.0']
-imap = ['aiosmtplib>=3.0']
-all = [
-    'anya[scheduler-apscheduler,scheduler-cron,scheduler-schedule,imap]',
-]
+scheduler-apscheduler = ['apscheduler>=3.10,<4']  # 4.x is a different API
+test = ['pytest>=8']
+all = ['anya[scheduler-apscheduler]']
 
 [project.scripts]
 anya = 'anya.cli.main:main'
@@ -52,3 +50,12 @@ only-include = ['pylib']
 
 [tool.hatch.build.sources]
 'pylib' = 'anya'
+
+[tool.pytest.ini_options]
+# Only anya's own suite. Without this, pytest also collects tests under the
+# gitignored job/ tree, so a clean checkout would run a different suite.
+testpaths = ['test']
+addopts = '-m "not integration"'
+markers = [
+    'integration: touches unowned code or live services (DB, HTTP, browser); excluded from the default run',
+]

@@ -1,6 +1,6 @@
 ---
 name: python-prompting
-description: Prompt management for Python LLM/AI applications using WordLoom — declarative prompt/code separation, file layout, the shared loader pattern, file-inclusion (file:/glob:/dir:), naming conventions, and testing. Use when writing or refactoring prompts that get sent to Claude, OpenAI, OpenRouter, or any other LLM API from Python.
+description: Use when writing or refactoring prompts that Python code sends to an LLM (Claude, OpenAI, OpenRouter, or any other API). Covers WordLoom prompt/code separation, file layout, the shared loader pattern, file inclusion (file:/glob:/dir:), naming conventions, and testing.
 ---
 
 # Python Prompting (WordLoom)
@@ -8,7 +8,7 @@ description: Prompt management for Python LLM/AI applications using WordLoom —
 ## Purpose
 All LLM prompts — system, user, repair, evaluation — live in [WordLoom](https://github.com/OoriData/WordLoom/) TOML files, never as inline Python string constants. Prompts are content, not code; treating them as content lets non-engineers review them, lets you version and diff them, and lets you swap them without reinstalling the package. This is the Oori standard for declarative prompt/code separation.
 
-This skill complements [python-backend](../python/SKILL.md) — follow that one for Python coding conventions in tandem.
+This skill complements [python](../python/SKILL.md) — follow that one for Python coding conventions in tandem.
 
 ## Default rules
 

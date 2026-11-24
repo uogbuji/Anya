@@ -1,10 +1,24 @@
 # Changelog
 
-Notable changes to  Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/). Project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+Notable changes to Anya. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-<!-- 
+Versions before 0.4.0 were never formally released; their entries are kept as a working log.
+
 ## [Unreleased]
- -->
+
+Planned as 0.4.0, the first GitHub release.
+
+### Changed
+- **Python 3.14 is now the minimum** (was 3.12). The Docker image's base moves to `python:3.14-slim`, pinned by digest as before.
+- `pytest` now collects only `test/` and skips tests marked `integration` by default (run those with `pytest -m integration`). Previously it also picked up tests under the gitignored `job/` tree. Test tooling is available as the `test` extra: `uv pip install '.[test]'`.
+- `apscheduler` is capped below 4.0, which has an incompatible API.
+
+### Removed
+- The `scheduler-cron`, `scheduler-schedule`, and `imap` extras. No code used them.
+
+### Fixed
+- HTML fetching (`plain` and `reddit` methods) failed on fresh installs: selectolax 1.0 removed the parser backend that `ogbujipt.text.html` imports, so HTML cleaning was unavailable. `selectolax` is now capped below 1.0 until OgbujiPT moves to the newer backend.
+- `inference()`: the Anthropic and OpenAI-compatible clients now set an explicit 90s request timeout instead of inheriting the SDKs' 600s default, which matched the executor's own 600s controller timeout. A single stalled upstream LLM call could silently eat a job's entire time budget, surfacing only as `TimeoutError: Controller ... exceeded 600s` with no application-level error. A stall now raises `UpstreamAPIError` instead.
 
 ## [0.3.1] - 20260702
 
