@@ -59,6 +59,7 @@ brave_max_results = 10                              # brave search fetcher (key:
 blotter = "data/blotter.txt"
 memory = "data/memory.txt"
 http_cache = "data/http-cache.sqlite"
+runs = "data/job-runs.json"               # when each job last ran (decides what is due)
 
 [blotter]
 lock_timeout = 30                         # seconds to wait for the blotter file lock

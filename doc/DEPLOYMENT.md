@@ -28,7 +28,7 @@ Everything deploy-specific is mounted or injected:
 |-------|-----|-----|
 | anya package | installed into a venv in the image (non-editable wheel) | the real distribution, frozen per build |
 | `job/` dir | **bind mount** `${ANYA_JOB_DIR:-./job}:/app/job` (read-write) | deployer-curated; jobs change without a rebuild, and per-job state persists |
-| `data/` (blotter, memory, HTTP cache) | **bind mount** `./data:/app/data` | runtime-populated; persists across restarts and rebuilds |
+| `data/` (blotter, memory, HTTP cache, job run record) | **bind mount** `./data:/app/data` | runtime-populated; persists across restarts and rebuilds |
 | `config.toml` (model aliases/backends) | **baked** default; mount to override | sensible default frozen with the image; mount `:ro` to change backends without rebuilding |
 | API keys, `RESEND_*`, email-to, interval | **injected** as env at `up` time | secrets/config that must not live in the image |
 
@@ -56,8 +56,10 @@ ANYA_JOB_DIR=/srv/anya/jobs.prod \
 > start** (exit 2) with a message, so a botched mount surfaces immediately in `docker logs`.
 
 > **Which jobs *run* vs. which are *present*** is still separate: `ANYA_PHASES` (default
-> `default`) and per-job `frequency` gate each tick. Ad-hoc:
-> `docker compose run --rm anya run --select_jobs=grant-hunter` bypasses frequency.
+> `default`) and per-job `frequency` gate each tick, together with the run record in
+> `data/job-runs.json`: a job runs once per scheduled period, so container restarts don't
+> re-run it. Ad-hoc: `docker compose run --rm anya run --select_jobs=grant-hunter` bypasses
+> frequency and the record.
 
 ## One-time: remote Docker context for the Droplet
 
@@ -222,8 +224,9 @@ add to the `anya` service:
 Both bind mounts are host directories, so everything survives restarts **and** image
 rebuilds (rebuilds only replace the runtime, never your content):
 
-- **Process state** — `data/blotter.txt`, `data/memory.txt`, and the shared HTTP cache
-  (`config.toml [paths]`, defaulting to `data/…` under the `/app` workdir) live under `./data`.
+- **Process state** — `data/blotter.txt`, `data/memory.txt`, the shared HTTP cache, and
+  `data/job-runs.json` (when each job last ran) (`config.toml [paths]`, defaulting to `data/…`
+  beside `/app/config.toml`) live under `./data`.
 - **Per-job state** — anything a controller writes into its own job dir (e.g.
   `grant-hunter`'s `state.toml` seen-ledger + long-tail cursor) lives under the mounted
   job dir, so weekly-continuation state just works — no per-job mount gymnastics needed.

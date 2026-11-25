@@ -13,7 +13,7 @@ anya.toml fields:
 
     title       = "..."          # informational
     description = "..."          # informational
-    frequency   = "daily"        # daily | weekly | sundays | saturday | weekday
+    frequency   = "daily"        # daily | weekday | weekly (Mondays) | saturday | sunday
     phase       = "default"      # default | ignore
     entry       = "controller.py"
     type        = "pymain"       # only pymain is implemented today
@@ -24,11 +24,13 @@ anya.toml fields:
 
 import tomllib
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 import structlog
 from dotenv import dotenv_values
+
+from anya.job.runs import is_due, normalize_frequency
 
 
 _VALID_TYPES = frozenset({'pymain'})
@@ -64,7 +66,10 @@ def load_job(path: Path) -> Job | None:
     job_id = str(data.get('id') or path.name).strip() or path.name
     title = str(data.get('title') or job_id)
     description = str(data.get('description') or '')
-    frequency = str(data.get('frequency') or 'daily').strip().lower() or 'daily'
+    try:
+        frequency = normalize_frequency(str(data.get('frequency') or 'daily'))
+    except ValueError as e:
+        raise ValueError(f'Job {job_id!r}: {e}') from None
     phase = str(data.get('phase') or 'default').strip().lower() or 'default'
     entry_name = str(data.get('entry') or 'controller.py')
     type_ = str(data.get('type') or 'pymain').strip().lower()
@@ -159,21 +164,11 @@ def discover_jobs(job_dir: Path, *, errors: list[tuple[str, str]] | None = None)
     return jobs
 
 
-def should_run_job(job: Job, now: datetime | None = None) -> bool:
+def should_run_job(job: Job, now: datetime | None = None, last_run: date | None = None) -> bool:
     '''
-    Per-job frequency check. Main schedule sets granularity (e.g. daily);
-    this filters which jobs run this tick.
+    Whether a job is due this tick, given the date it last ran (None if never/unknown).
+    See anya.job.runs for the rule: due when it hasn't run since its most recent
+    scheduled date, so missed runs catch up and repeat ticks don't re-run.
     '''
-    now = now or datetime.now()
-    freq = job.frequency.lower()
-    if freq == 'daily':
-        return True
-    if freq == 'weekly':
-        return now.weekday() == 0  # Monday
-    if freq == 'sundays':
-        return now.weekday() == 6
-    if freq == 'saturday':
-        return now.weekday() == 5
-    if freq.startswith('weekday'):
-        return now.weekday() < 5
-    return True  # unknown -> run
+    today = (now or datetime.now()).date()
+    return is_due(job.frequency, today, last_run)

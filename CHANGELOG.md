@@ -17,6 +17,9 @@ Will be the first actual GitHub release.
 
 - `drop_tabindex_minus_one=True` option on the `plain` and `reddit` fetchers (and `clean_html`) to also strip `tabindex="-1"` elements. Off by default.
 
+- A job run record, `data/job-runs.json` (`config.toml [paths] runs`). A job is due when it hasn't run since its most recent scheduled day, so a missed run happens at the next tick, and restarts or extra ticks don't re-run jobs. Failed runs are recorded too, and `--select_jobs` runs aren't recorded. Without a record, a job runs on its scheduled days, as before.
+- `frequency` accepts the aliases `sundays`, `saturdays`, `weekdays`, `monday`, and `mondays`.
+
 ### Changed
 - **Python 3.14 is now the minimum** (was 3.12). The Docker image's base moves to `python:3.14-slim`, pinned by digest as before.
 - HTML cleaning and HTML→Markdown conversion now live in anya (`anya.fetchers._html`), adapted from OgbujiPT's `ogbujipt.text.html` onto selectolax's lexbor backend. This is a temporary copy until the code is available in a released Amara. The `ogbujipt` git dependency is gone, and the Docker builder no longer needs `git`.
@@ -25,6 +28,7 @@ Will be the first actual GitHub release.
 
 - Relative paths in `config.toml [paths]` now resolve against the config file's directory, not the current working directory. For the usual layout (`config.toml` beside `data/`) nothing moves.
 - LLM calls: SDK retries are capped at 1 (was the SDKs' default of 2), and each `inference()` call has an overall 240s limit covering retries and the JSON-repair second request, surfacing as `UpstreamAPIError`. Previously a stall could take up to 270s per request, or about 540s for a structured-output call, against the executor's 600s ceiling. LLM clients are now closed after each call.
+- An unknown `frequency` in `anya.toml` is now a job load error (reported in the email) instead of silently running on every tick.
 - Controllers may emit several `---MEMORY---` / `---RESOLVED---` blocks; each type's blocks are joined.
 
 ### Removed
@@ -42,6 +46,9 @@ Will be the first actual GitHub release.
 - The HTTP cache wasn't shared: its default path was resolved relative to each controller's working directory (its job dir), giving every job its own cache under `job/<id>/data/`. It's now one cache beside `config.toml`. Old per-job `job/*/data/http-cache.sqlite` files can be deleted.
 - The CLI looked for `./config.toml` before `$ANYA_CONFIG_FILE`, the reverse of the documented order (and of what controllers use). Both now use `--config`, then `$ANYA_CONFIG_FILE`, then `./config.toml`.
 - Report text that a controller printed after a `---MEMORY---` or `---RESOLVED---` block was dropped from the report. Only the blocks themselves are removed now, and an unterminated marker no longer swallows the rest of the report.
+- `weekly`, `saturday`, and `sunday` jobs could be skipped for a whole period. The scheduler waits a full interval after each tick finishes, so tick times drift later by the jobs' runtime; once a tick slid past midnight (e.g. Sunday 23:50 to Tuesday 00:05), a Monday-only job never saw a Monday. Missed runs now catch up via the run record.
+- Every restart of `anya serve` (e.g. a container restart or redeploy) re-ran all of the day's jobs, sending duplicate reports. The run record prevents this.
+- The asyncio scheduler left a pending helper task behind on every tick.
 - A refused connection to an LLM backend (e.g. a local server that's down) escaped as a raw SDK error; it's now an `UpstreamAPIError`.
 - `base_url` in an Anthropic backend's `config.toml` entry was ignored.
 - `inference()`: the Anthropic and OpenAI-compatible clients now set an explicit 90s request timeout instead of inheriting the SDKs' 600s default, which matched the executor's own 600s controller timeout. A single stalled upstream LLM call could silently eat a job's entire time budget, surfacing only as `TimeoutError: Controller ... exceeded 600s` with no application-level error. A stall now raises `UpstreamAPIError` instead.

@@ -1,11 +1,14 @@
 '''Unit tests for job discovery and filtering.'''
 
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
+
+import pytest
 
 from anya.job.loader import (
     Job,
     discover_jobs,
+    load_job,
     filter_by_job_ids,
     filter_by_phase,
     should_run_job,
@@ -84,3 +87,22 @@ def test_discover_jobs_skips_underscore_shared_lib(tmp_path: Path):
 
     jobs = discover_jobs(tmp_path)
     assert [j.id for j in jobs] == ['alpha']
+
+
+def test_should_run_job_uses_last_run():
+    job = _job('weekly-job', frequency='weekly')
+    tuesday = datetime(2026, 6, 9, 12, 0)
+    assert should_run_job(job, tuesday, last_run=date(2026, 6, 1)) is True   # missed Monday: catch up
+    assert should_run_job(job, tuesday, last_run=date(2026, 6, 8)) is False  # already ran this week
+
+
+def test_load_job_normalizes_and_validates_frequency(tmp_path: Path):
+    job_dir = tmp_path / 'j'
+    job_dir.mkdir()
+    (job_dir / 'controller.py').write_text('print(1)\n')
+    (job_dir / 'anya.toml').write_text('frequency = "Sundays"\n')
+    assert load_job(job_dir).frequency == 'sunday'
+    # Previously an unknown frequency silently ran every tick.
+    (job_dir / 'anya.toml').write_text('frequency = "fortnightly"\n')
+    with pytest.raises(ValueError, match="Job 'j': unknown frequency"):
+        load_job(job_dir)

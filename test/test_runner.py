@@ -1,6 +1,7 @@
 '''Unit tests for run_tick: per-job isolation and the combined report email.'''
 
 import asyncio
+import json
 from pathlib import Path
 
 import pytest
@@ -65,3 +66,28 @@ def test_load_errors_respect_job_selection(tmp_path, sent):
                          select_jobs={'a-good'}))
 
     assert sent[0]['subject'] == '[Anya] a-good'
+
+
+def test_job_runs_once_per_period_across_ticks(tmp_path, sent):
+    # Regression: every tick (and every restart of `anya serve`) re-ran all daily jobs.
+    jobs = tmp_path / 'job'
+    jobs.mkdir()
+    _job(jobs, 'daily-ok', 'print("ran")\n')
+    _job(jobs, 'daily-fails', 'raise SystemExit(3)\n')
+    runs = tmp_path / 'data' / 'job-runs.json'
+
+    def tick(**kw):
+        asyncio.run(run_tick(jobs, tmp_path / 'blotter.txt', tmp_path / 'memory.txt', ['me@example.com'],
+                             runs_path=runs, **kw))
+
+    tick()
+    assert sent[-1]['subject'] == '[Anya] daily-fails, daily-ok'
+    record = json.loads(runs.read_text())
+    assert record['daily-ok']['status'] == 'ok' and record['daily-fails']['status'] == 'failed'
+
+    tick()  # same day: nothing due, so no email
+    assert len(sent) == 1
+
+    tick(select_jobs={'daily-ok'})  # explicit selection still runs, and isn't recorded
+    assert len(sent) == 2
+    assert json.loads(runs.read_text()) == record

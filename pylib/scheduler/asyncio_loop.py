@@ -1,14 +1,17 @@
 '''Simple asyncio-based recurring scheduler.'''
 
 import asyncio
+import contextlib
 from collections.abc import Callable, Coroutine
 from typing import Any
+
+import structlog
 
 from anya.scheduler.base import Scheduler
 
 
 class AsyncioLoopScheduler(Scheduler):
-    '''Runs a callback on a fixed interval using asyncio.sleep.'''
+    '''Runs a callback, then waits interval_seconds (or until stopped), repeatedly.'''
 
     def __init__(self, interval_seconds: float = 86400) -> None:
         '''
@@ -41,10 +44,8 @@ class AsyncioLoopScheduler(Scheduler):
         self._stop_event.set()
         if self._task:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
 
     async def _run_loop(self) -> None:
@@ -53,9 +54,9 @@ class AsyncioLoopScheduler(Scheduler):
                 await self._callback(*self._args, **self._kwargs)
             except Exception:
                 # Log but don't crash the loop
-                import structlog
                 structlog.get_logger().exception('scheduler callback failed')
-            await asyncio.wait(
-                [asyncio.create_task(self._stop_event.wait()), asyncio.create_task(asyncio.sleep(self._interval))],
-                return_when=asyncio.FIRST_COMPLETED,
-            )
+            # Wait out the interval, waking early if stop() is called. (No helper tasks:
+            # the old asyncio.wait over two new tasks left one pending every tick.)
+            with contextlib.suppress(TimeoutError):
+                async with asyncio.timeout(self._interval):
+                    await self._stop_event.wait()

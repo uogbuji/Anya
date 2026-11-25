@@ -47,7 +47,7 @@ To run the tests: `uv pip install '.[test]'`, then `pytest`. The default run is 
 4. Run once: `anya run` (recipients come from `config.toml [email] to`; `--email_to=you@example.com` overrides)
 5. Or serve (daily): `anya serve --interval=86400`
 6. Run example job too: `anya run --phases=default,ignore`
-7. Dev: run one job (ignores frequency): `anya run --select-jobs=my-job`
+7. Dev: run one job (ignores frequency and the run record): `anya run --select-jobs=my-job`
 
 In reality I'd use 1password, so
 
@@ -137,7 +137,7 @@ anya test --args='-k hunt -x'      # extra pytest arguments
 ```toml
 title       = "..."
 description = "..."
-frequency   = "daily"        # daily | weekly | sundays | saturday | weekday
+frequency   = "daily"        # daily | weekday | weekly (Mondays) | saturday | sunday
 phase       = "default"      # default | ignore (ignore = skip unless --phases includes it)
 entry       = "controller.py"
 type        = "pymain"       # only pymain supported today
@@ -267,7 +267,17 @@ Select with `config.toml [email] provider = "resend" | "unosend"` (default: `res
 
 # Scheduler
 
-Built-in: an asyncio loop (`anya serve --scheduler=asyncio`, the default). The scheduler is modular — implement `anya.scheduler.base.Scheduler` to plug in another.
+Built-in: an asyncio loop (`anya serve --scheduler=asyncio`, the default). It ticks once at startup, then every `--interval` seconds (default 86400) after each tick finishes. The scheduler is modular — implement `anya.scheduler.base.Scheduler` to plug in another.
+
+**Which jobs run on a tick.** Anya records when each job last ran in `data/job-runs.json` (`config.toml [paths] runs`). A job is due when it hasn't run since its most recent scheduled day: today for `daily`, the latest Monday for `weekly`, the latest Saturday or Sunday for `saturday`/`sunday`, the latest Mon–Fri day for `weekday`. As a result:
+
+- A missed run happens at the next tick. For example, if ticks drift from late Sunday to early Tuesday, a `weekly` job runs on Tuesday rather than waiting a week.
+- Restarting `anya serve`, or running `anya run` again, doesn't re-run jobs that already ran today. Ticks can therefore come more often than once a day.
+- A job with no record yet runs on its next scheduled day.
+- Failed runs are recorded too, so a broken job reports its failure once per period, not on every tick. To retry right away, use `--select_jobs`.
+- `--select_jobs` runs bypass the schedule and aren't recorded.
+
+Days are local dates in the process's time zone (UTC in the Docker image unless you set `TZ`). Delete `data/job-runs.json` to reset all records.
 
 # Safety model
 

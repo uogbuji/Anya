@@ -118,6 +118,7 @@ def run_once(
             config_path=config_path,
             select_jobs=_parse_csv_set(select_jobs),
             exclude_jobs=_parse_csv_set(exclude_jobs),
+            runs_path=Path(cfg.paths.runs),
         )
     )
 
@@ -173,6 +174,7 @@ def serve(
             config_path=config_path,
             select_jobs=select_set,
             exclude_jobs=exclude_set,
+            runs_path=Path(cfg.paths.runs),
         )
 
     sched = get_scheduler(kind=scheduler, interval_seconds=interval)
@@ -185,8 +187,7 @@ def serve(
 async def _serve(scheduler) -> None:
     await scheduler.start()
     try:
-        while True:
-            await asyncio.sleep(3600)
+        await asyncio.Event().wait()  # park until cancelled (Ctrl-C / SIGTERM via asyncio.run)
     except (KeyboardInterrupt, asyncio.CancelledError):
         pass
     finally:

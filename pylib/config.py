@@ -40,6 +40,7 @@ config.toml layout:
     blotter = "data/blotter.txt"            # was BLOTTER_FILE
     memory = "data/memory.txt"
     http_cache = "data/http-cache.sqlite"   # was ANYA_HTTP_CACHE
+    runs = "data/job-runs.json"             # when each job last ran
 
     [blotter]
     lock_timeout = 30                       # was BLOTTER_LOCK_TIMEOUT
@@ -117,6 +118,7 @@ class PathsConfig:
     blotter: str = 'data/blotter.txt'
     memory: str = 'data/memory.txt'
     http_cache: str = 'data/http-cache.sqlite'
+    runs: str = 'data/job-runs.json'  # when each job last ran (anya.job.runs)
 
 
 @dataclass
@@ -250,7 +252,8 @@ def _parse_paths(data: dict, base_dir: Path) -> PathsConfig:
     def resolve(key: str) -> str:
         return str((base_dir / Path(str(section.get(key, getattr(defaults, key)))).expanduser()).resolve())
 
-    return PathsConfig(blotter=resolve('blotter'), memory=resolve('memory'), http_cache=resolve('http_cache'))
+    return PathsConfig(blotter=resolve('blotter'), memory=resolve('memory'), http_cache=resolve('http_cache'),
+                       runs=resolve('runs'))
 
 
 def resolve_config_path(path: Path | None = None) -> Path | None:
