@@ -15,7 +15,7 @@ import structlog
 
 from anya._http import client_or_new
 from anya.fetchers._cache import cached_client
-from anya.fetchers.protocol import FetchResult, WebFetcher
+from anya.fetchers.protocol import FetchResult, register_fetcher
 
 
 logger = structlog.get_logger()
@@ -77,7 +77,7 @@ async def fetch_rss(url: str, *, timeout: float = 15.0, max_entries: int = 20,
     return markdown
 
 
-class RSSFetcher(WebFetcher):
+class RSSFetcher:
     '''RSS/Atom fetcher returning a FetchResult.'''
 
     def __init__(self, timeout: float = 15.0, max_entries: int = 20, client: httpx.AsyncClient | None = None):
@@ -98,3 +98,6 @@ class RSSFetcher(WebFetcher):
         except Exception as e:  # noqa: BLE001
             return FetchResult(url=url, markdown='', success=False, error=f'RSS parse failed: {e}')
         return FetchResult(url=url, markdown=markdown, title=feed_title, success=True)
+
+
+register_fetcher('rss', RSSFetcher)

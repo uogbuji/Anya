@@ -31,7 +31,7 @@ services:
       # --- Email delivery secret (provider/sender/recipients are in config.toml [email]) ---
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       # --- Web search ("SERP") fetcher secrets — only jobs with tavily/brave sources need
-      # them (e.g. prospect-hunter, hap-prospect); harmless to leave empty otherwise. ---
+      # them; harmless to leave empty otherwise. ---
       TAVILY_API_KEY: ${TAVILY_API_KEY:-}
       BRAVE_API_KEY: ${BRAVE_API_KEY:-}
     volumes:

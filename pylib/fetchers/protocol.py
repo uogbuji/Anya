@@ -5,8 +5,9 @@ Provides a pluggable interface for different web scraping tools.
 Adapted from WebScout pattern for use in Anya jobs.
 '''
 
-from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Protocol
 
 import httpx
 import structlog
@@ -31,23 +32,25 @@ class FetchResult:
     error: str | None = None
 
 
-class WebFetcher(ABC):
-    '''Protocol for web content fetchers.'''
+class WebFetcher(Protocol):
+    '''Anything with an async fetch(url) -> FetchResult. No base class needed.'''
 
-    @abstractmethod
     async def fetch(self, url: str) -> FetchResult:
-        '''
-        Fetch a URL and return markdown content.
-
-        Args:
-            url: URL to fetch
-
-        Returns:
-            FetchResult with markdown content
-        '''
+        '''Fetch a URL and return its content as markdown.'''
+        ...
 
 
-class SimpleHttpFetcher(WebFetcher):
+# Fetch method name → constructor. Each fetcher module registers its own entries; the
+# anya.fetchers package imports them all, so the registry is full before any lookup.
+FETCHERS: dict[str, Callable[..., WebFetcher]] = {}
+
+
+def register_fetcher(name: str, factory: Callable[..., WebFetcher]) -> None:
+    '''Make a fetch method available to create_fetcher() (and `anya fetch --method`).'''
+    FETCHERS[name] = factory
+
+
+class SimpleHttpFetcher:
     '''
     Simple HTTP fetcher using httpx and OgbujiPT HTML processing.
 
@@ -106,7 +109,7 @@ class SimpleHttpFetcher(WebFetcher):
             )
 
 
-class Crawl4AIFetcher(WebFetcher):
+class Crawl4AIFetcher:
     '''
     Fetcher using Crawl4AI for JavaScript-heavy or bot-blocked sites.
 
@@ -178,28 +181,16 @@ class Crawl4AIFetcher(WebFetcher):
             )
 
 
-def create_fetcher(fetcher_type: str = 'simple', **kwargs) -> WebFetcher:
+def create_fetcher(fetcher_type: str = 'plain', **kwargs) -> WebFetcher:
     '''
-    Factory function to create a web fetcher.
-
-    Args:
-        fetcher_type: 'simple' / 'plain', 'crawl4ai', or 'reddit'
-        **kwargs: Additional arguments for the fetcher
-
-    Returns:
-        WebFetcher instance
+    Create a fetcher by method name: 'plain' (alias 'simple'), 'crawl4ai', 'reddit', 'rss',
+    or any name added with register_fetcher(). kwargs go to the fetcher's constructor.
     '''
-    if fetcher_type in ('simple', 'plain'):
-        return SimpleHttpFetcher(**kwargs)
-    if fetcher_type == 'crawl4ai':
-        return Crawl4AIFetcher(**kwargs)
-    if fetcher_type == 'reddit':
-        from anya.fetchers.reddit import RedditFetcher  # local import to avoid cycle
-        return RedditFetcher(**kwargs)
-    if fetcher_type == 'rss':
-        from anya.fetchers.rss import RSSFetcher  # local import to avoid cycle
-        return RSSFetcher(**kwargs)
-    raise ValueError(f'Unknown fetcher type: {fetcher_type}')
+    try:
+        factory = FETCHERS[fetcher_type]
+    except KeyError:
+        raise ValueError(f'Unknown fetcher type {fetcher_type!r}. Registered: {sorted(FETCHERS)}') from None
+    return factory(**kwargs)
 
 
 async def fetch_url(
@@ -216,5 +207,10 @@ async def fetch_url(
     Returns:
         FetchResult with markdown content
     '''
-    f = fetcher or create_fetcher('simple')
+    f = fetcher or create_fetcher('plain')
     return await f.fetch(url)
+
+
+register_fetcher('plain', SimpleHttpFetcher)
+register_fetcher('simple', SimpleHttpFetcher)
+register_fetcher('crawl4ai', Crawl4AIFetcher)

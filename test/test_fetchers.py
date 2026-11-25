@@ -145,3 +145,23 @@ def test_resend_error_raises():
     with pytest.raises(httpx.HTTPStatusError):
         run(resend_send(to=['x@example.com'], subject='S', html='h', api_key='k',
                         client=mock_client(lambda r: httpx.Response(422))))
+
+
+def test_custom_fetcher_registration():
+    from anya.fetchers import FetchResult, create_fetcher, register_fetcher
+    from anya.fetchers.protocol import FETCHERS
+
+    class Echo:
+        def __init__(self, prefix=''):
+            self.prefix = prefix
+
+        async def fetch(self, url):
+            return FetchResult(url=url, markdown=self.prefix + url)
+
+    register_fetcher('echo', Echo)
+    try:
+        assert run(create_fetcher('echo', prefix='> ').fetch('u')).markdown == '> u'
+    finally:
+        FETCHERS.pop('echo')
+    with pytest.raises(ValueError, match=r"Unknown fetcher type 'echo'. Registered: \['crawl4ai', 'plain'"):
+        create_fetcher('echo')

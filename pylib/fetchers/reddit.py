@@ -21,7 +21,7 @@ from anya._http import client_or_new
 from anya.config import get_config
 from anya.fetchers._cache import cached_client
 from anya.fetchers._html import clean_html, html2markdown
-from anya.fetchers.protocol import FetchResult, WebFetcher
+from anya.fetchers.protocol import FetchResult, register_fetcher
 from anya.fetchers.rss import _parse_bytes as _parse_feed
 
 _REDDIT_HOST_RE = re.compile(r'^(https?://)(?:[a-z0-9.-]+\.)?reddit\.com', re.IGNORECASE)
@@ -56,7 +56,7 @@ def _login_wall(final_url: httpx.URL | str) -> str | None:
     return f'Reddit login wall (redirected to /login{f", reason={reason}" if reason else ""})'
 
 
-class RedditFetcher(WebFetcher):
+class RedditFetcher:
     '''Reddit-aware fetcher: old.reddit.com with UA → RSS fallback.'''
 
     def __init__(self, user_agent: str | None = None, timeout: float = 30.0,
@@ -108,3 +108,6 @@ class RedditFetcher(WebFetcher):
                     error=f'{fallback_reason}; RSS fallback ({rss_url}) failed: {e}',
                 )
         return FetchResult(url=rss_url, markdown=markdown, title=feed_title, success=True)
+
+
+register_fetcher('reddit', RedditFetcher)

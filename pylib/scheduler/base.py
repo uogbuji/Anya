@@ -1,22 +1,20 @@
-'''Modular scheduler abstraction. Implementations can use asyncio, cron, etc.'''
+'''The scheduler seam. Implementations can use asyncio, cron, etc.'''
 
-from abc import ABC, abstractmethod
 from collections.abc import Callable, Coroutine
-from typing import Any
+from typing import Any, Protocol
 
 
-class Scheduler(ABC):
-    '''Abstract scheduler. Run a callback on a schedule; implementations define the schedule.'''
+class Scheduler(Protocol):
+    '''Runs a callback on a schedule; implementations define the schedule. No base class needed.'''
 
-    @abstractmethod
     async def start(self) -> None:
         '''Start the scheduler.'''
+        ...
 
-    @abstractmethod
     async def stop(self) -> None:
         '''Stop the scheduler.'''
+        ...
 
-    @abstractmethod
     def schedule(
         self,
         callback: Callable[..., Coroutine[Any, Any, None]],
@@ -24,3 +22,4 @@ class Scheduler(ABC):
         **kwargs: Any,
     ) -> None:
         '''Register a callback to run on the schedule.'''
+        ...

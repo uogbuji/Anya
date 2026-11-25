@@ -37,3 +37,33 @@ def test_connection_refused_is_upstream_error(monkeypatch, provider):
     backend = BackendConfig(name='down', provider=provider, model='m', api_key='k', base_url=base_url)
     with pytest.raises(UpstreamAPIError, match='could not connect'):
         asyncio.run(complete(backend, 'sys', 'user'))
+
+
+def test_strict_compatible_schemas():
+    from anya.llm import strict_compatible
+
+    strict = {'type': 'object', 'additionalProperties': False, 'required': ['ok', 'items'], 'properties': {
+        'ok': {'type': 'boolean'},
+        'items': {'type': 'array', 'items': {
+            'type': 'object', 'additionalProperties': False, 'required': ['url'],
+            'properties': {'url': {'type': 'string'}}}},
+    }}
+    assert strict_compatible(strict)
+    # Typical hand-written schemas: optional fields or open objects. Previously sent with
+    # strict=True, which OpenAI rejects with HTTP 400.
+    assert not strict_compatible({'type': 'object', 'properties': {'significant': {'type': 'boolean'}}})
+    loose_inner = {**strict, 'properties': {**strict['properties'], 'items': {'type': 'array', 'items': {
+        'type': 'object', 'properties': {'url': {'type': 'string'}}}}}}
+    assert not strict_compatible(loose_inner)
+
+
+def test_token_limit_param_by_endpoint():
+    from anya.llm import _token_limit_param
+
+    def backend(url):
+        return BackendConfig(name='b', provider='openai', model='m', base_url=url)
+
+    assert _token_limit_param(backend(None)) == 'max_completion_tokens'
+    assert _token_limit_param(backend('https://api.openai.com/v1')) == 'max_completion_tokens'
+    assert _token_limit_param(backend('https://openrouter.ai/api/v1')) == 'max_tokens'
+    assert _token_limit_param(backend('http://localhost:8080/v1')) == 'max_tokens'

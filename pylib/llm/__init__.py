@@ -14,6 +14,7 @@ to forward any tool/function-call kwarg. Inference is text-in / text-or-JSON-out
 import asyncio
 import json
 from typing import Any
+from urllib.parse import urlparse
 
 from anya.config import BackendConfig
 
@@ -101,6 +102,32 @@ def _wrap_anthropic_error(backend: BackendConfig, exc: Exception) -> UpstreamAPI
             body = None
     msg = _extract_provider_error(body) or str(exc)
     return UpstreamAPIError(f'{backend.name} (anthropic): HTTP {status} — {msg}')
+
+
+def strict_compatible(schema: Any) -> bool:
+    '''
+    Whether a JSON schema meets OpenAI's strict structured-output rules: every object
+    lists all of its properties in `required` and sets `additionalProperties: false`.
+    Sending strict=True with any other schema gets an HTTP 400 instead of an answer.
+    '''
+    if isinstance(schema, list):
+        return all(strict_compatible(s) for s in schema)
+    if not isinstance(schema, dict):
+        return True
+    if schema.get('type') == 'object' or isinstance(schema.get('properties'), dict):
+        props = schema.get('properties', {})
+        if schema.get('additionalProperties') is not False or set(schema.get('required', [])) != set(props):
+            return False
+    return all(strict_compatible(v) for k, v in schema.items() if k != 'required')
+
+
+def _token_limit_param(backend: BackendConfig) -> str:
+    '''
+    OpenAI's own API deprecated max_tokens (its reasoning models reject it) in favor of
+    max_completion_tokens. Local servers and routers such as OpenRouter expect max_tokens.
+    '''
+    host = urlparse(backend.base_url).hostname if backend.base_url else 'api.openai.com'
+    return 'max_completion_tokens' if host == 'api.openai.com' else 'max_tokens'
 
 
 def _check_kwargs(extra: dict[str, Any]) -> None:
@@ -214,7 +241,7 @@ async def _openai(
 
     params: dict[str, Any] = {
         'model': backend.model,
-        'max_tokens': max_tokens,
+        _token_limit_param(backend): max_tokens,
         'messages': [
             {'role': 'system', 'content': system},
             {'role': 'user', 'content': user},
@@ -233,10 +260,11 @@ async def _openai(
             # Schema requested → ask for structured JSON. Many servers (including
             # grammar-capable oMLX builds) honor response_format json_schema. If a
             # backend ignores it, we fall back to one post-hoc parse-and-retry.
+            # strict only when the schema qualifies; otherwise OpenAI answers HTTP 400.
             schema_params = dict(params)
             schema_params['response_format'] = {
                 'type': 'json_schema',
-                'json_schema': {'name': 'result', 'schema': schema, 'strict': True},
+                'json_schema': {'name': 'result', 'schema': schema, 'strict': strict_compatible(schema)},
             }
             resp = await client.chat.completions.create(**schema_params)
             raw = resp.choices[0].message.content or ''

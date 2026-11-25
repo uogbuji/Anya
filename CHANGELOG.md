@@ -24,6 +24,7 @@ Will be the first actual GitHub release.
 - Controllers can read long-term memory: the executor sets `ANYA_MEMORY_FILE`, and `anya.memory.read_memory()` reads it, optionally only one job's entries (`job_id=`).
 - `client=` on every fetcher, searcher, `fetch_rss`, `fetch_http`, and the `resend`/`unosend` email providers: pass an `httpx.AsyncClient` (e.g. one on `httpx.MockTransport` in tests) instead of letting each call make its own.
 - `verify=` on the `plain` fetcher (default `True`) to disable TLS certificate checks for a specific site.
+- `register_fetcher(name, factory)` and `register_searcher(name, factory)` in `anya.fetchers` to add fetch methods and search providers; they work with `create_fetcher`/`create_searcher` and `anya fetch --method`.
 
 ### Changed
 - **Python 3.14 is now the minimum** (was 3.12). The Docker image's base moves to `python:3.14-slim`, pinned by digest as before.
@@ -36,6 +37,8 @@ Will be the first actual GitHub release.
 - `---RESOLVED---` handling is narrower and safer. Each line is one phrase (min. 8 characters), not fragments split on commas, "and", and "or", and a job only removes its own memory entries, never another job's. Resolutions apply before the same run's new `---MEMORY---` entries are added. `prune_memory()` takes the job id and returns the number removed.
 - Memory writes hold a file lock, as blotter writes do. A lock timeout on memory or blotter shows as a "System issue" line in the report instead of failing the job. `BlotterLockError` is now a subclass of a general `StateLockError`.
 - The default system prompt for `inference()` moved from Python source into a packaged WordLoom file (`anya/resources/inference.loom.toml`), replacing `anya.inference.DEFAULT_SYSTEM_PROMPT` with `default_system_prompt()`. Job prompt files are reloaded when they change on disk.
+- `WebFetcher`, `WebSearcher`, and `Scheduler` are now `typing.Protocol`s rather than abstract base classes, so implementations need no base class. `create_fetcher`, `create_searcher`, and `get_scheduler` look names up in registries (`FETCHERS`, `SEARCHERS`, `SCHEDULERS`) instead of `if` chains. `create_fetcher()` defaults to `'plain'` (`'simple'` remains an alias).
+- OpenAI-compatible backends: JSON-schema requests use strict mode only when the schema qualifies, and requests to OpenAI's own API send `max_completion_tokens` instead of the deprecated `max_tokens`.
 - An unknown `frequency` in `anya.toml` is now a job load error (reported in the email) instead of silently running on every tick.
 - Controllers may emit several `---MEMORY---` / `---RESOLVED---` blocks; each type's blocks are joined.
 
@@ -60,6 +63,9 @@ Will be the first actual GitHub release.
 - In controllers, log lines from anya's own library (e.g. "TAVILY_API_KEY not set", the HTTP cache migration notice, RSS debug output) went to stdout, so they appeared in the emailed and blottered report.
 - Memory parsing cut an entry in two at any `---` line in its content, and pruning silently deleted any text that didn't look like an entry.
 - A missing prompt id raised a `KeyError` that listed every prompt's full body, not just the prompt names.
+- Structured-output calls to OpenAI failed with HTTP 400 for any schema not written for strict mode (e.g. an object with optional properties), because `strict: true` was always sent. Such schemas are now sent non-strict.
+- OpenAI reasoning models rejected requests because of `max_tokens`.
+- `anya fetch --method=<unknown>` ended in a traceback; it now prints the valid methods.
 - A refused connection to an LLM backend (e.g. a local server that's down) escaped as a raw SDK error; it's now an `UpstreamAPIError`.
 - `base_url` in an Anthropic backend's `config.toml` entry was ignored.
 - `inference()`: the Anthropic and OpenAI-compatible clients now set an explicit 90s request timeout instead of inheriting the SDKs' 600s default, which matched the executor's own 600s controller timeout. A single stalled upstream LLM call could silently eat a job's entire time budget, surfacing only as `TimeoutError: Controller ... exceeded 600s` with no application-level error. A stall now raises `UpstreamAPIError` instead.

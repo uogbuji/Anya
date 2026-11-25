@@ -19,7 +19,8 @@ other Anya secret.
 '''
 
 import os
-from abc import ABC, abstractmethod
+from collections.abc import Callable
+from typing import Protocol
 
 import httpx
 import structlog
@@ -83,16 +84,24 @@ def _parse_brave(data: dict) -> list[dict]:
     return out
 
 
-class WebSearcher(ABC):
-    '''Protocol for query-based search providers (the SERP analogue of WebFetcher).'''
+class WebSearcher(Protocol):
+    '''Anything with an async search(query) -> FetchResult (the SERP analogue of WebFetcher).'''
 
-    @abstractmethod
     async def search(self, query: str) -> FetchResult:
         '''Run a search and return its results rendered as markdown.'''
         ...
 
 
-class TavilySearchFetcher(WebSearcher):
+# Search provider name → constructor; see register_searcher().
+SEARCHERS: dict[str, Callable[..., WebSearcher]] = {}
+
+
+def register_searcher(name: str, factory: Callable[..., WebSearcher]) -> None:
+    '''Make a search provider available to create_searcher() (and `anya fetch --method`).'''
+    SEARCHERS[name] = factory
+
+
+class TavilySearchFetcher:
     '''Tavily Search API. Key from `TAVILY_API_KEY`; result count from config.'''
 
     def __init__(self, api_key: str | None = None, max_results: int | None = None,
@@ -122,7 +131,7 @@ class TavilySearchFetcher(WebSearcher):
                            title=f'Tavily: {query}', success=True)
 
 
-class BraveSearchFetcher(WebSearcher):
+class BraveSearchFetcher:
     '''Brave Web Search API. Key from `BRAVE_API_KEY`; result count from config.'''
 
     def __init__(self, api_key: str | None = None, max_results: int | None = None,
@@ -155,14 +164,14 @@ class BraveSearchFetcher(WebSearcher):
 
 def create_searcher(provider: str = 'tavily', **kwargs) -> WebSearcher:
     '''
-    Factory for a search provider. `provider` is 'tavily' or 'brave'. Mirrors
-    create_fetcher, but searchers take a query rather than a URL.
+    Create a searcher by provider name: 'tavily', 'brave', or any name added with
+    register_searcher(). Mirrors create_fetcher, but searchers take a query, not a URL.
     '''
-    if provider == 'tavily':
-        return TavilySearchFetcher(**kwargs)
-    if provider == 'brave':
-        return BraveSearchFetcher(**kwargs)
-    raise ValueError(f'Unknown search provider: {provider}')
+    try:
+        factory = SEARCHERS[provider]
+    except KeyError:
+        raise ValueError(f'Unknown search provider {provider!r}. Registered: {sorted(SEARCHERS)}') from None
+    return factory(**kwargs)
 
 
 async def search_web(query: str, *, provider: str = 'tavily',
@@ -170,3 +179,7 @@ async def search_web(query: str, *, provider: str = 'tavily',
     '''Run a search and return markdown results. Convenience for jobs/controllers.'''
     s = searcher or create_searcher(provider)
     return await s.search(query)
+
+
+register_searcher('tavily', TavilySearchFetcher)
+register_searcher('brave', BraveSearchFetcher)

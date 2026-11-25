@@ -13,15 +13,12 @@ from rich.panel import Panel
 
 from anya.config import AnyaConfig, get_config, resolve_config_path
 from anya.fetchers import create_fetcher, create_searcher
+from anya.fetchers.protocol import FETCHERS
+from anya.fetchers.search import SEARCHERS
 from anya.job.loader import discover_jobs
 from anya.logs import configure_logging
 from anya.runner import run_tick
 from anya.scheduler import get_scheduler
-
-
-# Methods that take a query (create_searcher) rather than a URL (create_fetcher);
-# mirrors the split in job/_lib/prospect.py so `anya fetch` dispatches like a job does.
-SEARCH_METHODS = {'tavily', 'brave'}
 
 
 def _parse_csv_set(value: str) -> set[str] | None:
@@ -188,7 +185,7 @@ def fetch(
 
     target: a URL (for fetch methods) or a search query (for search methods)
     method: plain | crawl4ai | reddit | rss (fetch a URL)
-            | tavily | brave (search a query). Default: plain.
+            | tavily | brave (search a query), or any registered name. Default: plain.
     config: path to Anya config.toml (default: $ANYA_CONFIG_FILE, else ./config.toml).
       Supplies crawl4ai_base_url, result counts, reddit UA, etc.
 
@@ -196,11 +193,13 @@ def fetch(
     title, success/error, length) goes to stderr. Exits 1 if the fetch failed.
     '''
     method = method.strip().lower()
+    if method not in FETCHERS and method not in SEARCHERS:
+        raise SystemExit(f'Unknown method {method!r}. Fetch: {sorted(FETCHERS)}; search: {sorted(SEARCHERS)}')
     # Load config so the fetchers see crawl4ai_base_url / result counts / UA from config.toml.
     get_config(_resolve_config_path(config), reload=True)
 
     err = Console(stderr=True)
-    if method in SEARCH_METHODS:
+    if method in SEARCHERS:  # search providers take a query; everything else fetches a URL
         result = asyncio.run(create_searcher(method).search(target))
     else:
         result = asyncio.run(create_fetcher(method).fetch(target))

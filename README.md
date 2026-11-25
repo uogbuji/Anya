@@ -100,7 +100,7 @@ A `config.toml` defining at least one `[models.backends.*]` is **required** — 
 | Provider | config.toml | Capability |
 |----------|-------------|------------|
 | **openrouter** (preferred cloud) | `provider="openrouter"`, `model="vendor/model-id"`; env `OPENROUTER_API_KEY` | Text + `response_format` JSON schema (per-model; controller's post-hoc retry covers the rest) |
-| **openai** (local servers + cloud OpenAI) | `provider="openai"`, `model`, `base_url`, env `OPENAI_API_KEY` (optional for local) | Text + `response_format` JSON schema. For local: oMLX (grammar-capable build), vLLM, etc. |
+| **openai** (local servers + cloud OpenAI) | `provider="openai"`, `model`, `base_url`, env `OPENAI_API_KEY` (optional for local) | Text + `response_format` JSON schema (strict mode when the schema allows: every object lists all properties as `required` and sets `additionalProperties: false`). For local: oMLX (grammar-capable build), vLLM, etc. |
 | **anthropic** (direct) | `provider="anthropic"`, `model`, env `ANTHROPIC_API_KEY` | Text + structured output (tool-use coercion) |
 
 `mlx_lm` is no longer supported; use an oMLX deployment fronted as an OpenAI-compatible server.
@@ -225,6 +225,8 @@ result = await create_fetcher('crawl4ai').fetch('https://reddit.com/...')
 
 The `plain` and `reddit` fetchers strip content a reader wouldn't see (scripts, styles, and elements hidden by CSS or `aria-hidden`) before converting to Markdown. Pass `drop_tabindex_minus_one=True` (e.g. `create_fetcher('plain', drop_tabindex_minus_one=True)`) to also strip `tabindex="-1"` elements; it's off by default because many sites put that on their main content.
 
+Add your own fetch method or search provider with `register_fetcher('name', factory)` / `register_searcher('name', factory)` from `anya.fetchers`. A factory is anything that builds an object with an async `fetch(url)` (or `search(query)`) returning a `FetchResult`. Registered names work with `create_fetcher`/`create_searcher` and `anya fetch --method`.
+
 Every fetcher and searcher (and the email providers) accepts `client=` — an `httpx.AsyncClient` to use instead of making its own. Tests pass one built on `httpx.MockTransport`; a long-running caller can reuse connections. The `plain` fetcher checks TLS certificates; `create_fetcher('plain', verify=False)` turns that off for a site you trust whose certificate is broken.
 
 All GET fetchers share an HTTP cache (hishel, RFC 9111) so we send `If-None-Match` / `If-Modified-Since` on revalidation and honor `Cache-Control` / `Vary` — be a good HTTP citizen. SQLite-backed, default at `data/http-cache.sqlite`; set `config.toml [paths] http_cache` to relocate. Delete the file to clear the cache.
@@ -272,7 +274,7 @@ Select with `config.toml [email] provider = "resend" | "unosend"` (default: `res
 
 # Scheduler
 
-Built-in: an asyncio loop (`anya serve --scheduler=asyncio`, the default). It ticks once at startup, then every `--interval` seconds (default 86400) after each tick finishes. The scheduler is modular — implement `anya.scheduler.base.Scheduler` to plug in another.
+Built-in: an asyncio loop (`anya serve --scheduler=asyncio`, the default). It ticks once at startup, then every `--interval` seconds (default 86400) after each tick finishes. To plug in another, write a class with the `anya.scheduler.base.Scheduler` methods (`schedule`, `start`, `stop`; no base class needed) and add it to `anya.scheduler.SCHEDULERS`.
 
 **Which jobs run on a tick.** Anya records when each job last ran in `data/job-runs.json` (`config.toml [paths] runs`). A job is due when it hasn't run since its most recent scheduled day: today for `daily`, the latest Monday for `weekly`, the latest Saturday or Sunday for `saturday`/`sunday`, the latest Mon–Fri day for `weekday`. As a result:
 
@@ -291,4 +293,4 @@ Days are local dates in the process's time zone (UTC in the Docker image unless 
 - **Controllers must treat inference output as untrusted input.** Don't `eval` it, don't pass it to a shell, don't construct paths from it. When LLM output drives control flow (loops over LLM-returned URLs, file paths, etc.), constrain it with a schema AND validate it against controller-side allow-lists or pre-fetched candidates.
 - **Synthesized reports** may contain prompt-injected content from upstream web data; that's acceptable for human-read email/blotter output, but worth flagging if downstream agents consume Anya output.
 
-See `job/update-check/controller.py` for the fan-out filter pattern (cheap LLM filter per candidate → synthesis over survivors).
+A pattern that works well: fan-out filtering — a cheap model screens each candidate with a small structured-output question, then a stronger model synthesizes a report over the survivors.

@@ -7,10 +7,8 @@ from typing import Any
 
 import structlog
 
-from anya.scheduler.base import Scheduler
 
-
-class AsyncioLoopScheduler(Scheduler):
+class AsyncioLoopScheduler:
     '''Runs a callback, then waits interval_seconds (or until stopped), repeatedly.'''
 
     def __init__(self, interval_seconds: float = 86400) -> None:
