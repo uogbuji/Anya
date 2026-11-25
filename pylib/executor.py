@@ -7,8 +7,6 @@ deterministic side effects. The executor does not call the LLM directly any
 more — that lives in the controller's calls to anya.inference.inference().
 '''
 
-from __future__ import annotations
-
 import asyncio
 import os
 import sys
@@ -102,11 +100,12 @@ async def _run_controller(job: Job, extra_env: dict[str, str], timeout: int) -> 
         env=env,
     )
     try:
-        stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-    except asyncio.TimeoutError:
+        async with asyncio.timeout(timeout):
+            stdout_b, stderr_b = await proc.communicate()
+    except TimeoutError:
         proc.kill()
         await proc.wait()
-        raise TimeoutError(f'Controller {job.entry.name} exceeded {timeout}s')
+        raise TimeoutError(f'Controller {job.entry.name} exceeded {timeout}s') from None
 
     return stdout_b.decode('utf-8', errors='replace'), stderr_b.decode('utf-8', errors='replace'), proc.returncode or 0
 

@@ -33,3 +33,25 @@ def test_add_shared_lib_path_preserves_existing(tmp_path: Path):
 
     env = _add_shared_lib_path({'PYTHONPATH': '/existing/path'}, job_path)
     assert env['PYTHONPATH'] == f'{tmp_path.resolve()}{os.pathsep}/existing/path'
+
+
+def test_run_controller_times_out_and_kills(tmp_path: Path):
+    '''A controller that overruns its timeout is killed and surfaces as TimeoutError.'''
+    import asyncio
+    import time
+
+    import pytest
+
+    from anya.executor import _run_controller
+    from anya.job.loader import load_job
+
+    job_dir = tmp_path / 'slow'
+    job_dir.mkdir()
+    (job_dir / 'anya.toml').write_text('title = "slow"\n')
+    (job_dir / 'controller.py').write_text('import time\ntime.sleep(30)\n')
+    job = load_job(job_dir)
+
+    start = time.monotonic()
+    with pytest.raises(TimeoutError, match='exceeded 0.3s'):
+        asyncio.run(_run_controller(job, {}, timeout=0.3))
+    assert time.monotonic() - start < 5

@@ -10,8 +10,6 @@ WordLoom's file/dir/glob inclusion feature is enabled so a prompt entry can
 pull in supporting text without the controller having to assemble it.
 '''
 
-from __future__ import annotations
-
 import threading
 from pathlib import Path
 

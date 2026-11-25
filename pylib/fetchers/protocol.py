@@ -44,7 +44,6 @@ class WebFetcher(ABC):
         Returns:
             FetchResult with markdown content
         '''
-        pass
 
 
 class SimpleHttpFetcher(WebFetcher):

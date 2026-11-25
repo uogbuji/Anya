@@ -8,6 +8,8 @@ integration test and lives elsewhere (network + secrets, excluded from this run)
 
 import asyncio
 
+import pytest
+
 from anya.fetchers.search import (
     BraveSearchFetcher,
     TavilySearchFetcher,
@@ -80,8 +82,5 @@ def test_brave_no_key_soft_fails(monkeypatch):
 def test_create_searcher_dispatch():
     assert isinstance(create_searcher('tavily', max_results=1), TavilySearchFetcher)
     assert isinstance(create_searcher('brave', max_results=1), BraveSearchFetcher)
-    try:
+    with pytest.raises(ValueError, match='Unknown search provider'):
         create_searcher('nope')
-        assert False, 'expected ValueError'
-    except ValueError:
-        pass

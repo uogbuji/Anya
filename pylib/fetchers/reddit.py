@@ -11,15 +11,13 @@ Reddit may answer with a login wall instead: a redirect to /login (e.g.
 alike. That is reported as a failure, never as fetched content.
 '''
 
-from __future__ import annotations
-
-import re
 import asyncio
+import re
 from urllib.parse import parse_qs, urlparse, urlunparse
 
 import httpx
 
-from anya.config import DEFAULT_REDDIT_USER_AGENT as DEFAULT_USER_AGENT, get_config
+from anya.config import get_config
 from anya.fetchers._cache import cached_client
 from anya.fetchers._html import clean_html, html2markdown
 from anya.fetchers.protocol import FetchResult, WebFetcher

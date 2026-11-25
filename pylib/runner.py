@@ -3,8 +3,6 @@ Main runner: discover jobs, filter by frequency, execute each.
 This is the callback for the scheduler.
 '''
 
-from __future__ import annotations
-
 from datetime import datetime
 from pathlib import Path
 

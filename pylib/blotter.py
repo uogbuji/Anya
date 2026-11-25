@@ -1,7 +1,7 @@
 '''Append-only log for user review. Never modified, only appended.
 Uses file locking for shared context with other agent systems.'''
 
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from filelock import FileLock, Timeout
@@ -34,7 +34,7 @@ def append_blotter(blotter_path: Path, job_id: str, entry: str) -> None:
     try:
         with lock:
             blotter_path.parent.mkdir(parents=True, exist_ok=True)
-            ts = datetime.utcnow().isoformat() + 'Z'
+            ts = datetime.now(UTC).isoformat().replace('+00:00', 'Z')
             line = f'[{ts}] [{job_id}] {entry}\n'
             with blotter_path.open('a', encoding='utf-8') as f:
                 f.write(line)

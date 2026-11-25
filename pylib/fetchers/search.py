@@ -18,8 +18,6 @@ Non-secret knobs live in `config.toml [fetch]` (`tavily_max_results`,
 other Anya secret.
 '''
 
-from __future__ import annotations
-
 import os
 from abc import ABC, abstractmethod
 

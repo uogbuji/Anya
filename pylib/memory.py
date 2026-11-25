@@ -1,6 +1,6 @@
 '''Long-term memory for critical findings. Jobs can instruct updates.'''
 
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -16,7 +16,7 @@ def append_memory(memory_path: Path, job_id: str, content: str) -> None:
     Append to long-term memory. Used for critical findings per job instructions.
     '''
     memory_path.parent.mkdir(parents=True, exist_ok=True)
-    ts = datetime.utcnow().isoformat() + 'Z'
+    ts = datetime.now(UTC).isoformat().replace('+00:00', 'Z')
     block = f'\n---\n[{ts}] [{job_id}]\n{content}\n'
     with memory_path.open('a', encoding='utf-8') as f:
         f.write(block)

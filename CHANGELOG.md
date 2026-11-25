@@ -1,12 +1,16 @@
 # Changelog
+<!--
+Notable changes to Onya are recorded here. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/). Project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Notable changes to Anya. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-Versions before 0.4.0 were never formally released; their entries are kept as a working log.
-
+For interim changes not yet earmarked for a particular release, can use this header at the top:
 ## [Unreleased]
+-->
 
-Planned as 0.4.0, the first GitHub release.
+Note: versions before 0.4.0 were never formally released; their entries are kept as a working log.
+
+## [0.4.0] - 20261124: Python 3.14 version floor bump, and concomitant fixes.
+
+Will be the first actual GitHub release.
 
 ### Added
 - `anya test [--job_dir=job] [--args='...']` runs the tests that live in a job directory (e.g. `job/_lib/test/`), which anya's own `pytest` run no longer collects. pytest runs in a subprocess with the job root first on `PYTHONPATH`, as the executor sets it for controllers, so job tests can `from _lib import ...` without a `sys.path` conftest.

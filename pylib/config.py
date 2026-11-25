@@ -48,8 +48,6 @@ A config.toml with at least one [models.backends.*] is required: there is no
 env-var fallback for defining a backend (start from config.example.toml).
 '''
 
-from __future__ import annotations
-
 import os
 import re
 import tomllib

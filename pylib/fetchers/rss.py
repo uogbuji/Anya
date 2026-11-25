@@ -5,8 +5,6 @@
 create_fetcher.
 '''
 
-from __future__ import annotations
-
 import asyncio
 import html as _html
 import re

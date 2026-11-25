@@ -22,8 +22,6 @@ anya.toml fields:
     select      = 3              # optional; exposed as ANYA_JOB_SELECT
 '''
 
-from __future__ import annotations
-
 import tomllib
 from dataclasses import dataclass
 from datetime import datetime

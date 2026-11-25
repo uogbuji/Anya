@@ -6,8 +6,6 @@ Sender comes from config.toml [email] from (passed in as from_addr); falls back 
 'anya@localhost'.
 '''
 
-from __future__ import annotations
-
 import os
 from typing import Any
 

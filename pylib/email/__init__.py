@@ -16,8 +16,6 @@ Only the API key is a secret and stays in env (RESEND_API_KEY / UNOSEND_API_KEY)
 Register your own with register_provider('myprov', send_fn).
 '''
 
-from __future__ import annotations
-
 from typing import Any, Protocol
 
 from anya.config import get_config

@@ -11,8 +11,6 @@ Tool use is NOT exposed. Callers cannot pass tools=; the dispatcher refuses
 to forward any tool/function-call kwarg. Inference is text-in / text-or-JSON-out.
 '''
 
-from __future__ import annotations
-
 import json
 from typing import Any
 
