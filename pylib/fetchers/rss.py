@@ -10,8 +10,10 @@ import html as _html
 import re
 
 import feedparser
+import httpx
 import structlog
 
+from anya._http import client_or_new
 from anya.fetchers._cache import cached_client
 from anya.fetchers.protocol import FetchResult, WebFetcher
 
@@ -65,9 +67,10 @@ def _parse_bytes(content: bytes, source_url: str, max_entries: int = 20) -> tupl
     return '\n'.join(lines), feed_title
 
 
-async def fetch_rss(url: str, *, timeout: float = 15.0, max_entries: int = 20) -> str:
+async def fetch_rss(url: str, *, timeout: float = 15.0, max_entries: int = 20,
+                    client: httpx.AsyncClient | None = None) -> str:
     '''Fetch an RSS/Atom feed and return a readable markdown summary.'''
-    async with cached_client(follow_redirects=True, timeout=timeout) as client:
+    async with client_or_new(client, lambda: cached_client(follow_redirects=True, timeout=timeout)) as client:
         resp = await client.get(url)
         resp.raise_for_status()
     markdown, _ = await asyncio.to_thread(_parse_bytes, resp.content, url, max_entries)
@@ -77,13 +80,15 @@ async def fetch_rss(url: str, *, timeout: float = 15.0, max_entries: int = 20) -
 class RSSFetcher(WebFetcher):
     '''RSS/Atom fetcher returning a FetchResult.'''
 
-    def __init__(self, timeout: float = 15.0, max_entries: int = 20):
+    def __init__(self, timeout: float = 15.0, max_entries: int = 20, client: httpx.AsyncClient | None = None):
         self.timeout = timeout
         self.max_entries = max_entries
+        self.client = client
 
     async def fetch(self, url: str) -> FetchResult:
         try:
-            async with cached_client(follow_redirects=True, timeout=self.timeout) as client:
+            async with client_or_new(self.client, lambda: cached_client(follow_redirects=True,
+                                                                        timeout=self.timeout)) as client:
                 resp = await client.get(url)
                 resp.raise_for_status()
         except Exception as e:  # noqa: BLE001

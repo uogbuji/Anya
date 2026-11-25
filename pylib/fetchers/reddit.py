@@ -17,6 +17,7 @@ from urllib.parse import parse_qs, urlparse, urlunparse
 
 import httpx
 
+from anya._http import client_or_new
 from anya.config import get_config
 from anya.fetchers._cache import cached_client
 from anya.fetchers._html import clean_html, html2markdown
@@ -59,21 +60,22 @@ class RedditFetcher(WebFetcher):
     '''Reddit-aware fetcher: old.reddit.com with UA → RSS fallback.'''
 
     def __init__(self, user_agent: str | None = None, timeout: float = 30.0,
-                 drop_tabindex_minus_one: bool = False):
+                 drop_tabindex_minus_one: bool = False, client: httpx.AsyncClient | None = None):
         self.user_agent = user_agent or get_config().fetch.reddit_user_agent
         self.timeout = timeout
         self.drop_tabindex_minus_one = drop_tabindex_minus_one
+        self.client = client  # if given, used as-is; the User-Agent is still sent per request
 
     async def fetch(self, url: str) -> FetchResult:
         old_url = _to_old_reddit(url)
         rss_url = _to_rss(url)
-        async with cached_client(
+        headers = {'User-Agent': self.user_agent}
+        async with client_or_new(self.client, lambda: cached_client(
             timeout=self.timeout,
             follow_redirects=True,
-            headers={'User-Agent': self.user_agent},
-        ) as client:
+        )) as client:
             try:
-                resp = await client.get(old_url)
+                resp = await client.get(old_url, headers=headers)
                 if wall := _login_wall(resp.url):
                     fallback_reason = wall
                 elif resp.is_success:
@@ -93,7 +95,7 @@ class RedditFetcher(WebFetcher):
 
             # RSS fallback.
             try:
-                resp = await client.get(rss_url)
+                resp = await client.get(rss_url, headers=headers)
                 if wall := _login_wall(resp.url):
                     raise RuntimeError(wall)
                 resp.raise_for_status()

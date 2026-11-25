@@ -14,6 +14,7 @@ from rich.panel import Panel
 from anya.config import AnyaConfig, get_config, resolve_config_path
 from anya.fetchers import create_fetcher, create_searcher
 from anya.job.loader import discover_jobs
+from anya.logs import configure_logging
 from anya.runner import run_tick
 from anya.scheduler import get_scheduler
 
@@ -21,24 +22,6 @@ from anya.scheduler import get_scheduler
 # Methods that take a query (create_searcher) rather than a URL (create_fetcher);
 # mirrors the split in job/_lib/prospect.py so `anya fetch` dispatches like a job does.
 SEARCH_METHODS = {'tavily', 'brave'}
-
-
-def _configure_plain_tracebacks() -> None:
-    '''Use standard Python tracebacks instead of Rich's fancy format.'''
-    from structlog.contextvars import merge_contextvars
-    from structlog.dev import ConsoleRenderer, plain_traceback, set_exc_info
-    from structlog.processors import StackInfoRenderer, TimeStamper, add_log_level
-
-    structlog.configure(
-        processors=[
-            merge_contextvars,
-            add_log_level,
-            StackInfoRenderer(),
-            set_exc_info,
-            TimeStamper(fmt='%Y-%m-%d %H:%M:%S', utc=False),
-            ConsoleRenderer(exception_formatter=plain_traceback),
-        ],
-    )
 
 
 def _parse_csv_set(value: str) -> set[str] | None:
@@ -61,7 +44,7 @@ def _resolve_config_path(config: str) -> Path | None:
 
 def main() -> None:
     '''Anya: headless LLM agent runner.'''
-    _configure_plain_tracebacks()
+    configure_logging()
     fire.Fire({
         'run': run_once,
         'serve': serve,

@@ -156,8 +156,9 @@ A regular Python program. It runs as a subprocess with these env vars set:
 - `ANYA_PROMPTS_FILE` (resolved path to `anya.loom.toml`)
 - `ANYA_CONFIG_FILE` (resolved path to `config.toml`, if any)
 - `ANYA_JOB_SELECT` (when `select` is set)
+- `ANYA_MEMORY_FILE` (resolved path to long-term memory; read it with `anya.memory.read_memory()`)
 
-Whatever the controller prints to stdout becomes the job's report (emailed and blottered). The controller may emit `---MEMORY---` / `---END MEMORY---` and `---RESOLVED---` / `---END RESOLVED---` blocks (any number, anywhere in the output) to drive long-term memory; those are stripped from the user-facing report, and the text around them is kept.
+Whatever the controller prints to stdout becomes the job's report (emailed and blottered). Logging goes to stderr: `import anya` in a controller sets that up, so library warnings stay out of the report and show in the runner's log instead. Debug lines are hidden unless you set `ANYA_LOG_LEVEL=debug`. The controller may emit `---MEMORY---` / `---END MEMORY---` and `---RESOLVED---` / `---END RESOLVED---` blocks (any number, anywhere in the output) to drive long-term memory; those are stripped from the user-facing report, and the text around them is kept.
 
 ```python
 import asyncio
@@ -224,6 +225,8 @@ result = await create_fetcher('crawl4ai').fetch('https://reddit.com/...')
 
 The `plain` and `reddit` fetchers strip content a reader wouldn't see (scripts, styles, and elements hidden by CSS or `aria-hidden`) before converting to Markdown. Pass `drop_tabindex_minus_one=True` (e.g. `create_fetcher('plain', drop_tabindex_minus_one=True)`) to also strip `tabindex="-1"` elements; it's off by default because many sites put that on their main content.
 
+Every fetcher and searcher (and the email providers) accepts `client=` — an `httpx.AsyncClient` to use instead of making its own. Tests pass one built on `httpx.MockTransport`; a long-running caller can reuse connections. The `plain` fetcher checks TLS certificates; `create_fetcher('plain', verify=False)` turns that off for a site you trust whose certificate is broken.
+
 All GET fetchers share an HTTP cache (hishel, RFC 9111) so we send `If-None-Match` / `If-Modified-Since` on revalidation and honor `Cache-Control` / `Vary` — be a good HTTP citizen. SQLite-backed, default at `data/http-cache.sqlite`; set `config.toml [paths] http_cache` to relocate. Delete the file to clear the cache.
 
 ### Search ("SERP") fetchers
@@ -250,9 +253,11 @@ For **Reddit** as a query source, no special searcher is needed: point the exist
 
 Relative paths in `config.toml [paths]` (blotter, memory, HTTP cache) resolve against the directory holding `config.toml`, so the runner and every controller share the same files.
 
-
 - **Blotter** (`data/blotter.txt` by default): append-only log for review. Set `config.toml [paths] blotter` or `--blotter` CLI to share with other agent systems. Uses file locking (`{blotter}.lock`); `config.toml [blotter] lock_timeout` (default 30s).
-- **Memory** (`data/memory.txt`, or `config.toml [paths] memory`): long-term; controllers can append via `---MEMORY---` blocks on stdout, or prune resolved issues via `---RESOLVED---` blocks.
+- **Memory** (`data/memory.txt`, or `config.toml [paths] memory`): long-term findings, one entry per `---MEMORY---` block, tagged with the job id. Writes are locked like the blotter's.
+  - **Add:** print `---MEMORY---` / `---END MEMORY---`.
+  - **Read:** `from anya.memory import read_memory`, then `read_memory()` for everything or `read_memory(job_id=os.environ['ANYA_JOB_ID'])` for this job's own entries.
+  - **Remove:** print `---RESOLVED---` / `---END RESOLVED---` with one phrase per line. Each line of 8+ characters (list bullets are fine) removes this job's entries that contain it, ignoring case. A job never removes another job's entries. Resolutions apply before new entries are added.
 
 # Email providers
 

@@ -24,6 +24,7 @@ from abc import ABC, abstractmethod
 import httpx
 import structlog
 
+from anya._http import client_or_new
 from anya.config import get_config
 from anya.fetchers.protocol import FetchResult
 
@@ -95,17 +96,18 @@ class TavilySearchFetcher(WebSearcher):
     '''Tavily Search API. Key from `TAVILY_API_KEY`; result count from config.'''
 
     def __init__(self, api_key: str | None = None, max_results: int | None = None,
-                 timeout: float = 30.0):
+                 timeout: float = 30.0, client: httpx.AsyncClient | None = None):
         self.api_key = api_key or os.environ.get('TAVILY_API_KEY')
         self.max_results = max_results if max_results is not None else get_config().fetch.tavily_max_results
         self.timeout = timeout
+        self.client = client
 
     async def search(self, query: str) -> FetchResult:
         if not self.api_key:
             logger.warning('TAVILY_API_KEY not set; tavily search skipped', query=query)
             return FetchResult(url=query, markdown='', success=False, error='TAVILY_API_KEY not set')
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with client_or_new(self.client, lambda: httpx.AsyncClient(timeout=self.timeout)) as client:
                 resp = await client.post(TAVILY_SEARCH_URL, json={
                     'api_key': self.api_key,
                     'query': query,
@@ -124,17 +126,18 @@ class BraveSearchFetcher(WebSearcher):
     '''Brave Web Search API. Key from `BRAVE_API_KEY`; result count from config.'''
 
     def __init__(self, api_key: str | None = None, max_results: int | None = None,
-                 timeout: float = 30.0):
+                 timeout: float = 30.0, client: httpx.AsyncClient | None = None):
         self.api_key = api_key or os.environ.get('BRAVE_API_KEY')
         self.max_results = max_results if max_results is not None else get_config().fetch.brave_max_results
         self.timeout = timeout
+        self.client = client
 
     async def search(self, query: str) -> FetchResult:
         if not self.api_key:
             logger.warning('BRAVE_API_KEY not set; brave search skipped', query=query)
             return FetchResult(url=query, markdown='', success=False, error='BRAVE_API_KEY not set')
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with client_or_new(self.client, lambda: httpx.AsyncClient(timeout=self.timeout)) as client:
                 resp = await client.get(BRAVE_SEARCH_URL, params={
                     'q': query,
                     'count': self.max_results,

@@ -20,6 +20,11 @@ Will be the first actual GitHub release.
 - A job run record, `data/job-runs.json` (`config.toml [paths] runs`). A job is due when it hasn't run since its most recent scheduled day, so a missed run happens at the next tick, and restarts or extra ticks don't re-run jobs. Failed runs are recorded too, and `--select_jobs` runs aren't recorded. Without a record, a job runs on its scheduled days, as before.
 - `frequency` accepts the aliases `sundays`, `saturdays`, `weekdays`, `monday`, and `mondays`.
 
+- `anya.logs.configure_logging()`: one logging policy for the CLI and controllers: logs to stderr, plain tracebacks without local variables, info level by default (`ANYA_LOG_LEVEL` to change). `import anya` applies it inside controller processes. The executor now passes a successful controller's stderr to the runner's log; it used to be discarded.
+- Controllers can read long-term memory: the executor sets `ANYA_MEMORY_FILE`, and `anya.memory.read_memory()` reads it, optionally only one job's entries (`job_id=`).
+- `client=` on every fetcher, searcher, `fetch_rss`, `fetch_http`, and the `resend`/`unosend` email providers: pass an `httpx.AsyncClient` (e.g. one on `httpx.MockTransport` in tests) instead of letting each call make its own.
+- `verify=` on the `plain` fetcher (default `True`) to disable TLS certificate checks for a specific site.
+
 ### Changed
 - **Python 3.14 is now the minimum** (was 3.12). The Docker image's base moves to `python:3.14-slim`, pinned by digest as before.
 - HTML cleaning and HTML→Markdown conversion now live in anya (`anya.fetchers._html`), adapted from OgbujiPT's `ogbujipt.text.html` onto selectolax's lexbor backend. This is a temporary copy until the code is available in a released Amara. The `ogbujipt` git dependency is gone, and the Docker builder no longer needs `git`.
@@ -28,6 +33,9 @@ Will be the first actual GitHub release.
 
 - Relative paths in `config.toml [paths]` now resolve against the config file's directory, not the current working directory. For the usual layout (`config.toml` beside `data/`) nothing moves.
 - LLM calls: SDK retries are capped at 1 (was the SDKs' default of 2), and each `inference()` call has an overall 240s limit covering retries and the JSON-repair second request, surfacing as `UpstreamAPIError`. Previously a stall could take up to 270s per request, or about 540s for a structured-output call, against the executor's 600s ceiling. LLM clients are now closed after each call.
+- `---RESOLVED---` handling is narrower and safer. Each line is one phrase (min. 8 characters), not fragments split on commas, "and", and "or", and a job only removes its own memory entries, never another job's. Resolutions apply before the same run's new `---MEMORY---` entries are added. `prune_memory()` takes the job id and returns the number removed.
+- Memory writes hold a file lock, as blotter writes do. A lock timeout on memory or blotter shows as a "System issue" line in the report instead of failing the job. `BlotterLockError` is now a subclass of a general `StateLockError`.
+- The default system prompt for `inference()` moved from Python source into a packaged WordLoom file (`anya/resources/inference.loom.toml`), replacing `anya.inference.DEFAULT_SYSTEM_PROMPT` with `default_system_prompt()`. Job prompt files are reloaded when they change on disk.
 - An unknown `frequency` in `anya.toml` is now a job load error (reported in the email) instead of silently running on every tick.
 - Controllers may emit several `---MEMORY---` / `---RESOLVED---` blocks; each type's blocks are joined.
 
@@ -49,9 +57,17 @@ Will be the first actual GitHub release.
 - `weekly`, `saturday`, and `sunday` jobs could be skipped for a whole period. The scheduler waits a full interval after each tick finishes, so tick times drift later by the jobs' runtime; once a tick slid past midnight (e.g. Sunday 23:50 to Tuesday 00:05), a Monday-only job never saw a Monday. Missed runs now catch up via the run record.
 - Every restart of `anya serve` (e.g. a container restart or redeploy) re-ran all of the day's jobs, sending duplicate reports. The run record prevents this.
 - The asyncio scheduler left a pending helper task behind on every tick.
+- In controllers, log lines from anya's own library (e.g. "TAVILY_API_KEY not set", the HTTP cache migration notice, RSS debug output) went to stdout, so they appeared in the emailed and blottered report.
+- Memory parsing cut an entry in two at any `---` line in its content, and pruning silently deleted any text that didn't look like an entry.
+- A missing prompt id raised a `KeyError` that listed every prompt's full body, not just the prompt names.
 - A refused connection to an LLM backend (e.g. a local server that's down) escaped as a raw SDK error; it's now an `UpstreamAPIError`.
 - `base_url` in an Anthropic backend's `config.toml` entry was ignored.
 - `inference()`: the Anthropic and OpenAI-compatible clients now set an explicit 90s request timeout instead of inheriting the SDKs' 600s default, which matched the executor's own 600s controller timeout. A single stalled upstream LLM call could silently eat a job's entire time budget, surfacing only as `TimeoutError: Controller ... exceeded 600s` with no application-level error. A stall now raises `UpstreamAPIError` instead.
+
+### Security
+- The `plain` fetcher disabled TLS certificate verification on every request (`verify=False`), so anyone on the network path could alter fetched content before it reached the LLM. Verification is now on.
+- In controllers, exception tracebacks were rendered with local variables (structlog's default Rich formatter), which could print API keys from backend configs or request headers into logs. Controllers now use the same plain, locals-free tracebacks as the CLI.
+- Report emails now HTML-escape job output (see Fixed), so prompt-injected web content can't add markup, links, or tracking images.
 
 ## [0.3.1] - 20260702
 

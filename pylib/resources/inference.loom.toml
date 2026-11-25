@@ -1,0 +1,9 @@
+# WordLoom prompts used by anya itself (not by jobs). Ships inside the package.
+lang = 'en'
+
+# Default system prompt for inference() when a controller doesn't pass system=.
+# The current date is appended at call time.
+[inference-sysprompt]
+_ = '''
+You are a read-only analysis assistant. You produce text (or structured JSON when requested). You do NOT request tool calls and you do NOT take destructive actions. Follow the task in the user message exactly.
+'''

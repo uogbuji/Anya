@@ -11,6 +11,7 @@ from dataclasses import dataclass
 import httpx
 import structlog
 
+from anya._http import client_or_new
 from anya.config import get_config
 from anya.fetchers._cache import cached_client
 from anya.fetchers._html import clean_html, html2markdown
@@ -54,22 +55,29 @@ class SimpleHttpFetcher(WebFetcher):
 
     drop_tabindex_minus_one: also strip tabindex="-1" elements during cleaning
     (see anya.fetchers._html.clean_html). Off by default.
+    verify: check TLS certificates (default). Set False only for a specific site you
+      trust whose certificate is broken; it lets anyone on the path alter the content.
+    client: an httpx.AsyncClient to use instead of the shared cached one (its own
+      timeout/redirect/TLS settings then apply).
     '''
 
     def __init__(self, timeout: float = 30.0, follow_redirects: bool = True,
-                 drop_tabindex_minus_one: bool = False):
+                 drop_tabindex_minus_one: bool = False, verify: bool = True,
+                 client: httpx.AsyncClient | None = None):
         self.timeout = timeout
         self.follow_redirects = follow_redirects
         self.drop_tabindex_minus_one = drop_tabindex_minus_one
+        self.verify = verify
+        self.client = client
 
     async def fetch(self, url: str) -> FetchResult:
         '''Fetch URL with httpx and convert HTML to markdown.'''
         try:
-            async with cached_client(
+            async with client_or_new(self.client, lambda: cached_client(
                 timeout=self.timeout,
                 follow_redirects=self.follow_redirects,
-                verify=False,  # Some sites have SSL issues
-            ) as client:
+                verify=self.verify,
+            )) as client:
                 response = await client.get(url)
                 response.raise_for_status()
 
@@ -108,13 +116,14 @@ class Crawl4AIFetcher(WebFetcher):
     Run: docker run -p 11235:11235 unclecode/crawl4ai:basic
     '''
 
-    def __init__(self, base_url: str | None = None):
+    def __init__(self, base_url: str | None = None, client: httpx.AsyncClient | None = None):
         self.base_url = (base_url or get_config().fetch.crawl4ai_base_url).rstrip('/')
+        self.client = client
 
     async def fetch(self, url: str) -> FetchResult:
         '''Fetch URL using Crawl4AI service.'''
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            async with client_or_new(self.client, lambda: httpx.AsyncClient(timeout=60.0)) as client:
                 response = await client.post(
                     f'{self.base_url}/crawl',
                     json={

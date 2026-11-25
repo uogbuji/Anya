@@ -16,10 +16,11 @@ from pathlib import Path
 
 import structlog
 
-from anya.blotter import BlotterLockError, append_blotter
+from anya._locking import StateLockError
+from anya.blotter import append_blotter
 from anya.email import send_email
 from anya.job.loader import Job
-from anya.memory import append_memory, prune_memory
+from anya.memory import MEMORY_FILE_ENV, append_memory, prune_memory
 
 
 CONTROLLER_TIMEOUT_DEFAULT = 600  # seconds; controllers may do many LLM calls
@@ -147,7 +148,7 @@ async def execute_job(
     log = structlog.get_logger()
     log.info('executing job', job_id=job.id, entry=str(job.entry))
 
-    extra_env: dict[str, str] = {}
+    extra_env: dict[str, str] = {MEMORY_FILE_ENV: str(memory_path.resolve())}
     if config_path is not None:
         extra_env['ANYA_CONFIG_FILE'] = str(config_path.resolve())
 
@@ -160,17 +161,28 @@ async def execute_job(
         log.error('controller failed', job_id=job.id, returncode=rc, stderr=stderr.strip()[:4000])
         raise RuntimeError(f'Controller for {job.id!r} exited {rc}: {summary_line}')
 
-    summary, mem_content, resolved_content = _parse_blocks(stdout)
+    if stderr.strip():  # controller logs go to stderr; surface them in the runner's log
+        log.info('controller stderr', job_id=job.id, stderr=stderr.strip()[-4000:])
 
-    if mem_content:
-        append_memory(memory_path, job.id, mem_content)
-    if resolved_content:
-        prune_memory(memory_path, resolved_content)
+    summary, mem_content, resolved_content = _parse_blocks(stdout)
+    system_issues: list[str] = []
+
+    # Prune before appending, so this run's new entries can't match its own resolved phrases.
+    try:
+        if resolved_content:
+            prune_memory(memory_path, resolved_content, job.id)
+        if mem_content:
+            append_memory(memory_path, job.id, mem_content)
+    except StateLockError as e:
+        system_issues.append(f'memory not updated: {e}')
 
     try:
         append_blotter(blotter_path, job.id, summary[:2000])
-    except BlotterLockError as e:
-        summary = f'**System issue**: {e}\n\n---\n\n{summary}'
+    except StateLockError as e:
+        system_issues.append(str(e))
+
+    if system_issues:
+        summary = '\n'.join(f'**System issue**: {i}' for i in system_issues) + f'\n\n---\n\n{summary}'
 
     if email_to and not skip_email:
         html_body, _ = report_bodies([(job.id, summary)])

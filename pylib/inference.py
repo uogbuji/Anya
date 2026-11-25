@@ -29,14 +29,12 @@ from typing import Any
 
 from anya.config import AnyaConfig, BackendConfig, get_config
 from anya.llm import InferenceProtocolError, UpstreamAPIError, complete
-from anya.prompts import render_prompt
+from anya.prompts import package_prompt, render_prompt
 
 
-DEFAULT_SYSTEM_PROMPT = (
-    'You are a read-only analysis assistant. You produce text (or structured JSON when '
-    'requested). You do NOT request tool calls and you do NOT take destructive actions. '
-    'Follow the task in the user message exactly.'
-)
+def default_system_prompt() -> str:
+    '''The packaged default system prompt (anya/resources/inference.loom.toml).'''
+    return package_prompt('inference', 'inference-sysprompt')
 
 
 def _augment_system_prompt(sys_prompt: str, now: date) -> str:
@@ -81,9 +79,10 @@ async def inference(
     - promptid: WordLoom key in the job's prompts file
     - context:  template params for the prompt; consumed by str.format
     - model:    alias or backend name (resolved via config.toml). Optional;
-                falls back to the config's [models] default, then to the
-                synthesized "default" env-based backend.
-    - system:   override the default safety/system prompt
+                falls back to the config's [models] default, then to a backend
+                named "default".
+    - system:   override the default safety/system prompt (packaged in
+                anya/resources/inference.loom.toml)
     - response_schema: when given, the call returns a parsed JSON dict
     - now:      override "today" (defaults to date.today()); the current date is
                 appended to the system prompt so prompts can reason about time.
@@ -96,7 +95,7 @@ async def inference(
     backend: BackendConfig = cfg.resolve(model)
 
     user = render_prompt(_prompts_path(), promptid, context)
-    base_system = system if system is not None else DEFAULT_SYSTEM_PROMPT
+    base_system = system if system is not None else default_system_prompt()
     sys_prompt = _augment_system_prompt(base_system, now or date.today())
 
     return await complete(

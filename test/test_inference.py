@@ -38,7 +38,8 @@ def test_inference_injects_current_date_into_system_prompt(monkeypatch):
     assert result == 'ok'
     assert 'The current date is 2026-06-23.' in captured['system']
     # the default safety prompt is preserved alongside the date
-    assert inf.DEFAULT_SYSTEM_PROMPT in captured['system']
+    assert inf.default_system_prompt() in captured['system']
+    assert 'read-only analysis assistant' in captured['system']
 
 
 def test_inference_date_augments_custom_system_prompt(monkeypatch):

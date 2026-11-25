@@ -4,23 +4,11 @@ Uses file locking for shared context with other agent systems.'''
 from datetime import UTC, datetime
 from pathlib import Path
 
-from filelock import FileLock, Timeout
-
-from anya.config import get_config
+from anya._locking import StateLockError, locked
 
 
-class BlotterLockError(Exception):
+class BlotterLockError(StateLockError):
     '''Raised when the blotter lock cannot be acquired within the timeout.'''
-
-
-def _lock_path(blotter_path: Path) -> Path:
-    '''Path for the lock file (beside the blotter).'''
-    return blotter_path.with_suffix(blotter_path.suffix + '.lock')
-
-
-def _lock_timeout() -> float:
-    '''Lock timeout in seconds (config.toml [blotter] lock_timeout, default 30).'''
-    return get_config().blotter_lock_timeout
 
 
 def append_blotter(blotter_path: Path, job_id: str, entry: str) -> None:
@@ -29,25 +17,14 @@ def append_blotter(blotter_path: Path, job_id: str, entry: str) -> None:
     Uses exclusive file lock; raises BlotterLockError if lock cannot be
     acquired within the configured timeout (config.toml [blotter] lock_timeout).
     '''
-    lock_path = _lock_path(blotter_path)
-    lock = FileLock(lock_path, timeout=_lock_timeout())
-    try:
-        with lock:
-            blotter_path.parent.mkdir(parents=True, exist_ok=True)
-            ts = datetime.now(UTC).isoformat().replace('+00:00', 'Z')
-            line = f'[{ts}] [{job_id}] {entry}\n'
-            with blotter_path.open('a', encoding='utf-8') as f:
-                f.write(line)
-    except Timeout as e:
-        raise BlotterLockError(
-            f'Could not acquire blotter lock within {_lock_timeout():.0f}s. '
-            f'Another process may be using {blotter_path}. Investigate stale lock at {lock_path}'
-        ) from e
+    with locked(blotter_path, BlotterLockError):
+        ts = datetime.now(UTC).isoformat().replace('+00:00', 'Z')
+        with blotter_path.open('a', encoding='utf-8') as f:
+            f.write(f'[{ts}] [{job_id}] {entry}\n')
 
 
 def read_blotter(blotter_path: Path, limit: int = 100) -> list[str]:
-    '''Read last N lines from blotter (for context to Claude).
-    Loads full file; use read_blotter_tail for large files.'''
+    '''Read the last N lines of the blotter. Loads the whole file; see read_blotter_tail for large ones.'''
     if not blotter_path.exists():
         return []
     lines = blotter_path.read_text(encoding='utf-8').strip().splitlines()
@@ -55,8 +32,7 @@ def read_blotter(blotter_path: Path, limit: int = 100) -> list[str]:
 
 
 def read_blotter_tail(blotter_path: Path, limit: int = 50) -> list[str]:
-    '''Read last N lines efficiently without loading the full file.
-    For use when append_only_blotter=False.'''
+    '''Read the last N lines efficiently (from at most the final 64KB), for large blotters.'''
     if not blotter_path.exists():
         return []
     size = blotter_path.stat().st_size
