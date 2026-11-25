@@ -11,10 +11,9 @@ from dataclasses import dataclass
 import httpx
 import structlog
 
-from ogbujipt.text.html import clean_html, html2markdown
-
 from anya.config import get_config
 from anya.fetchers._cache import cached_client
+from anya.fetchers._html import clean_html, html2markdown
 
 
 logger = structlog.get_logger()

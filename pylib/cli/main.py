@@ -2,6 +2,8 @@
 
 import asyncio
 import os
+import shlex
+import sys
 from pathlib import Path
 
 import fire
@@ -72,6 +74,7 @@ def main() -> None:
         'run': run_once,
         'serve': serve,
         'fetch': fetch,
+        'test': run_job_tests,
     })
 
 
@@ -217,10 +220,6 @@ def fetch(
     title, success/error, length) goes to stderr. Exits 1 if the fetch failed.
     '''
     method = method.strip().lower()
-    # HTML cleaning spews per-rule CSS parser warnings on stderr; silence them so the
-    # eye-test's own status line and content stay readable.
-    import logging
-    logging.getLogger('CSSUTILS').setLevel(logging.CRITICAL)
     # Load config so the fetchers see crawl4ai_base_url / result counts / UA from config.toml.
     get_config(_resolve_config_path(config), reload=True)
 
@@ -241,3 +240,29 @@ def fetch(
     print(result.markdown)
     if not result.success:
         raise SystemExit(1)
+
+
+def run_job_tests(job_dir: str = 'job', args: str = '') -> None:
+    '''
+    Run the tests that live in a job directory (e.g. job/_lib/test/, job/my-job/test_*.py).
+
+    anya's own suite (test/) never collects these, since job/ is deployer content. pytest
+    runs in a fresh subprocess with the job root first on PYTHONPATH, the same place the
+    executor puts it for controllers, so tests can `from _lib import ...` without a conftest
+    of their own. Exits with pytest's exit code.
+
+    job_dir: the job directory to test (default: job)
+    args: extra pytest arguments as one string, e.g. --args='-k hunt -x'
+    '''
+    import importlib.util
+    import subprocess
+
+    if importlib.util.find_spec('pytest') is None:
+        raise SystemExit("anya test needs pytest: uv pip install 'anya[test]'")
+    root = Path(job_dir).resolve()
+    if not root.is_dir():
+        raise SystemExit(f'No job directory at {root}')
+    env = os.environ.copy()
+    env['PYTHONPATH'] = os.pathsep.join(p for p in (str(root), env.get('PYTHONPATH', '')) if p)
+    proc = subprocess.run([sys.executable, '-m', 'pytest', str(root), *shlex.split(args)], env=env)
+    raise SystemExit(proc.returncode)

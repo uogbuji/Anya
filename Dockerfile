@@ -14,10 +14,9 @@
 #   docker buildx imagetools inspect python:3.14-slim
 FROM python:3.14-slim@sha256:9aaa474097d094040649f2162a627c0049b408f52138d980916788d80f04802f AS builder
 
-# Build tooling: build-essential for any sdist-only wheel, git for VCS dependencies
-# (ogbujipt is pinned to git main until release).
+# Build tooling: build-essential for any dependency that ships only as an sdist.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends build-essential git \
+ && apt-get install -y --no-install-recommends build-essential \
  && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir uv
@@ -31,7 +30,7 @@ COPY pylib ./pylib
 
 # `uv pip install .` builds the wheel and installs it non-editably into the venv.
 RUN uv venv /opt/venv \
- && VIRTUAL_ENV=/opt/venv uv pip install --no-cache ".[scheduler-apscheduler]"
+ && VIRTUAL_ENV=/opt/venv uv pip install --no-cache .
 
 ############################################################
 # Runtime: slim image with just the venv + selected jobs + config.

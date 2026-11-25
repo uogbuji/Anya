@@ -120,6 +120,18 @@ job/
 
 A `_`-prefixed directory under `job/` (by convention `_lib/`) is **shared code, not a job** — job discovery skips it. When a `_lib/` exists, the executor puts the `job/` root on each controller's `PYTHONPATH`, so any controller can `from _lib import hunt` (or whatever modules you put there) to reuse logic across jobs without copy-paste. Like the rest of `job/`, `_lib/` is gitignored by default — handy for keeping job-specific or proprietary helpers out of the repo.
 
+## Testing jobs
+
+Tests for your jobs live with them, e.g. `job/_lib/test/test_hunt.py` or `job/my-job/test_controller.py`. Anya's own `pytest` run never collects them. Run them explicitly:
+
+```bash
+anya test                          # tests under ./job
+anya test --job_dir=/srv/anya/job  # another job directory
+anya test --args='-k hunt -x'      # extra pytest arguments
+```
+
+`anya test` puts the job root on `sys.path` first, as the executor does for controllers, so tests can `from _lib import ...` directly. It needs pytest: `uv pip install 'anya[test]'`.
+
 ## `anya.toml`
 
 ```toml
@@ -205,7 +217,7 @@ result = await create_fetcher('crawl4ai').fetch('https://reddit.com/...')
 
 **Fetch methods**:
 
-- `plain` (default) — simple HTTP + ogbujipt
+- `plain` (default) — simple HTTP, with hidden content stripped and the HTML converted to Markdown
 - `rss` — RSS/Atom feed via `feedparser`; returns a markdown summary of feed entries
 - `reddit` — rewrites any `*.reddit.com` URL (including `www.`) to `old.reddit.com` and sends a real User-Agent; falls back to the URL's `.rss` feed when blocked. Set `config.toml [fetch] reddit_user_agent` to override the default UA (Reddit's API guidelines ask the UA to identify your bot)
 - `crawl4ai` — Crawl4AI service for JS-heavy or bot-blocked sites. Run `docker run -p 11235:11235 unclecode/crawl4ai:basic` and set `config.toml [fetch] crawl4ai_base_url` if not on the default `http://localhost:11235`
@@ -250,7 +262,7 @@ Select with `config.toml [email] provider = "resend" | "unosend"` (default: `res
 
 # Scheduler
 
-Default: asyncio loop (`anya serve --scheduler=asyncio`). Optional: `uv pip install anya[scheduler-apscheduler]` then `anya serve --scheduler=apscheduler`. Scheduler is modular — implement `anya.scheduler.base.Scheduler` to plug in cron, python-crontab, schedule, etc.
+Built-in: an asyncio loop (`anya serve --scheduler=asyncio`, the default). The scheduler is modular — implement `anya.scheduler.base.Scheduler` to plug in another.
 
 # Safety model
 

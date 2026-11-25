@@ -1,4 +1,4 @@
-'''Modular scheduler abstraction. Implementations can use asyncio, APScheduler, cron, etc.'''
+'''Modular scheduler abstraction. Implementations can use asyncio, cron, etc.'''
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Coroutine

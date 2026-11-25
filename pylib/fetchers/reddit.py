@@ -12,10 +12,9 @@ from __future__ import annotations
 import re
 from urllib.parse import urlparse, urlunparse
 
-from ogbujipt.text.html import clean_html, html2markdown
-
 from anya.config import DEFAULT_REDDIT_USER_AGENT as DEFAULT_USER_AGENT, get_config
 from anya.fetchers._cache import cached_client
+from anya.fetchers._html import clean_html, html2markdown
 from anya.fetchers.protocol import FetchResult, WebFetcher
 from anya.fetchers.rss import fetch_rss
 

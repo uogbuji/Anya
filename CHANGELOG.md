@@ -8,16 +8,24 @@ Versions before 0.4.0 were never formally released; their entries are kept as a 
 
 Planned as 0.4.0, the first GitHub release.
 
+### Added
+- `anya test [--job_dir=job] [--args='...']` runs the tests that live in a job directory (e.g. `job/_lib/test/`), which anya's own `pytest` run no longer collects. pytest runs in a subprocess with the job root first on `PYTHONPATH`, as the executor sets it for controllers, so job tests can `from _lib import ...` without a `sys.path` conftest.
+
 ### Changed
 - **Python 3.14 is now the minimum** (was 3.12). The Docker image's base moves to `python:3.14-slim`, pinned by digest as before.
+- HTML cleaning and HTML→Markdown conversion now live in anya (`anya.fetchers._html`), adapted from OgbujiPT's `ogbujipt.text.html` onto selectolax's lexbor backend. This is a temporary copy until the code is available in a released Amara. The `ogbujipt` git dependency is gone, and the Docker builder no longer needs `git`.
+- Requires `selectolax>=1.0.2` and `hishel>=2.0`.
 - `pytest` now collects only `test/` and skips tests marked `integration` by default (run those with `pytest -m integration`). Previously it also picked up tests under the gitignored `job/` tree. Test tooling is available as the `test` extra: `uv pip install '.[test]'`.
-- `apscheduler` is capped below 4.0, which has an incompatible API.
 
 ### Removed
-- The `scheduler-cron`, `scheduler-schedule`, and `imap` extras. No code used them.
+- APScheduler support (`anya serve --scheduler=apscheduler` and the `scheduler-apscheduler` extra). It was only used as an interval timer, which the built-in asyncio scheduler already provides.
+- The `scheduler-cron`, `scheduler-schedule`, `imap`, and `all` extras. No code used them.
 
 ### Fixed
-- HTML fetching (`plain` and `reddit` methods) failed on fresh installs: selectolax 1.0 removed the parser backend that `ogbujipt.text.html` imports, so HTML cleaning was unavailable. `selectolax` is now capped below 1.0 until OgbujiPT moves to the newer backend.
+- HTML fetching (`plain` and `reddit` methods) failed on fresh installs: selectolax 1.0 removed the parser backend that `ogbujipt.text.html` imports.
+- After upgrading to hishel 2, every cached fetch (`plain`, `rss`, `reddit`) failed with "This database is a Hishel 1.x cache", until someone deleted the cache file by hand. An old 1.x cache is now moved aside (renamed with a `.hishel1-<timestamp>` suffix, with a logged warning) and a fresh one started.
+- Content hidden by an inline `style="display: none"` (or `visibility: hidden`) is now removed before conversion. The inline style was parsed as a stylesheet, so it never matched.
+- HTML cleaning no longer drops elements with `tabindex="-1"`, which sites commonly put on the main content container.
 - `inference()`: the Anthropic and OpenAI-compatible clients now set an explicit 90s request timeout instead of inheriting the SDKs' 600s default, which matched the executor's own 600s controller timeout. A single stalled upstream LLM call could silently eat a job's entire time budget, surfacing only as `TimeoutError: Controller ... exceeded 600s` with no application-level error. A stall now raises `UpstreamAPIError` instead.
 
 ## [0.3.1] - 20260702

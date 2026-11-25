@@ -7,19 +7,57 @@ A single SQLite-backed cache shared by all GET fetchers, so we send
 Default path: `data/http-cache.sqlite` (set config.toml [paths] http_cache to override).
 '''
 
-from __future__ import annotations
-
+import sqlite3
+from datetime import UTC, datetime
+from functools import cache
 from pathlib import Path
 
 import hishel
 import hishel.httpx as _hh
+import structlog
 
 from anya.config import get_config
 
 
+# Columns of the `entries` table in a hishel 1.x cache. hishel 2 refuses such a
+# database at the first request ("This database is a Hishel 1.x cache"), which
+# would fail every fetch until someone deleted the file by hand.
+_HISHEL1_ENTRY_COLUMNS = frozenset({'id', 'cache_key', 'data', 'created_at', 'deleted_at'})
+
+
+def _retire_hishel1_cache(path: Path) -> None:
+    '''
+    If `path` is a hishel 1.x cache, move it (and its WAL/SHM sidecars) aside so
+    hishel 2 starts a fresh one. It's only a cache, so nothing is lost but warm entries.
+    '''
+    if not path.is_file():
+        return
+    try:
+        with sqlite3.connect(f'{path.resolve().as_uri()}?mode=ro', uri=True) as conn:
+            columns = {row[1] for row in conn.execute('PRAGMA table_info(entries)')}
+    except sqlite3.DatabaseError:
+        return  # not something we recognize; leave it for hishel to report
+    if columns != _HISHEL1_ENTRY_COLUMNS:
+        return
+    stamp = datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')
+    for sidecar in ('', '-wal', '-shm'):
+        old = path.with_name(path.name + sidecar)
+        if old.exists():
+            old.rename(old.with_name(f'{old.name}.hishel1-{stamp}'))
+    structlog.get_logger().warning('moved aside an old hishel 1.x HTTP cache; starting a fresh one',
+                                   path=str(path), renamed_suffix=f'.hishel1-{stamp}')
+
+
+@cache
+def _prepare(path: Path) -> None:
+    '''Create the cache dir and retire a hishel 1.x database — once per path per process.'''
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _retire_hishel1_cache(path)
+
+
 def _cache_db_path() -> Path:
     p = Path(get_config().paths.http_cache)
-    p.parent.mkdir(parents=True, exist_ok=True)
+    _prepare(p)
     return p
 
 

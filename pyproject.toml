@@ -13,34 +13,23 @@ dependencies = [
     'filelock>=3.15',
     'openai>=1.0',
     'httpx>=0.28',
-    'hishel[httpx]>=1.2',  # RFC 9111 HTTP cache for httpx (ETag / Last-Modified / Cache-Control)
+    'hishel[httpx]>=2.0',  # RFC 9111 HTTP cache for httpx (ETag / Last-Modified / Cache-Control)
     'structlog>=24.0',
     'tenacity>=9.0',
     'fire>=0.7',
     'rich>=13.0',
     'python-dotenv>=1.0',
     'feedparser>=6.0',
-    'cssutils',  # Used by ogbujipt.text.html for CSS parsing
-    # Lightweight HTML→Markdown profile (clean_html, html2markdown) — pinned to git main
-    # until released; the PyPI build dragged in torch/transformers/tiktoken (multi-GB).
-    'ogbujipt @ git+https://github.com/OoriData/OgbujiPT.git@main',
-    # Required by ogbujipt.text.html, which still imports the Modest backend (selectolax.parser)
-    # that selectolax 1.0 removed. Lift the cap once OgbujiPT moves to selectolax.lexbor.
-    'selectolax>=0.3,<1',
+    'cssutils',  # CSS parsing for hidden-content removal in fetchers/_html.py
+    'selectolax>=1.0.2',  # HTML parsing (lexbor backend) for fetchers/_html.py
     'wordloom>=0.10.1',  # Prompts file format (anya.loom.toml)
 ]
 
 [project.optional-dependencies]
-scheduler-apscheduler = ['apscheduler>=3.10,<4']  # 4.x is a different API
 test = ['pytest>=8']
-all = ['anya[scheduler-apscheduler]']
 
 [project.scripts]
 anya = 'anya.cli.main:main'
-
-# Allow the git-pinned ogbujipt direct reference until it's released to PyPI.
-[tool.hatch.metadata]
-allow-direct-references = true
 
 [tool.hatch.version]
 path = 'pylib/__about__.py'
