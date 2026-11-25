@@ -11,6 +11,8 @@ Planned as 0.4.0, the first GitHub release.
 ### Added
 - `anya test [--job_dir=job] [--args='...']` runs the tests that live in a job directory (e.g. `job/_lib/test/`), which anya's own `pytest` run no longer collects. pytest runs in a subprocess with the job root first on `PYTHONPATH`, as the executor sets it for controllers, so job tests can `from _lib import ...` without a `sys.path` conftest.
 
+- `drop_tabindex_minus_one=True` option on the `plain` and `reddit` fetchers (and `clean_html`) to also strip `tabindex="-1"` elements. Off by default.
+
 ### Changed
 - **Python 3.14 is now the minimum** (was 3.12). The Docker image's base moves to `python:3.14-slim`, pinned by digest as before.
 - HTML cleaning and HTML→Markdown conversion now live in anya (`anya.fetchers._html`), adapted from OgbujiPT's `ogbujipt.text.html` onto selectolax's lexbor backend. This is a temporary copy until the code is available in a released Amara. The `ogbujipt` git dependency is gone, and the Docker builder no longer needs `git`.
@@ -25,7 +27,8 @@ Planned as 0.4.0, the first GitHub release.
 - HTML fetching (`plain` and `reddit` methods) failed on fresh installs: selectolax 1.0 removed the parser backend that `ogbujipt.text.html` imports.
 - After upgrading to hishel 2, every cached fetch (`plain`, `rss`, `reddit`) failed with "This database is a Hishel 1.x cache", until someone deleted the cache file by hand. An old 1.x cache is now moved aside (renamed with a `.hishel1-<timestamp>` suffix, with a logged warning) and a fresh one started.
 - Content hidden by an inline `style="display: none"` (or `visibility: hidden`) is now removed before conversion. The inline style was parsed as a stylesheet, so it never matched.
-- HTML cleaning no longer drops elements with `tabindex="-1"`, which sites commonly put on the main content container.
+- HTML cleaning no longer drops elements with `tabindex="-1"` by default; sites commonly put that on the main content container.
+- `reddit` fetcher: Reddit's login wall (a redirect to `/login` serving a 200 "Welcome to Reddit" page) was returned as successful content, and the RSS fallback would have parsed the same page as an empty feed. Both paths now detect the wall and report it as a failure. The fallback also reuses one HTTP client and now returns the feed's title.
 - `inference()`: the Anthropic and OpenAI-compatible clients now set an explicit 90s request timeout instead of inheriting the SDKs' 600s default, which matched the executor's own 600s controller timeout. A single stalled upstream LLM call could silently eat a job's entire time budget, surfacing only as `TimeoutError: Controller ... exceeded 600s` with no application-level error. A stall now raises `UpstreamAPIError` instead.
 
 ## [0.3.1] - 20260702

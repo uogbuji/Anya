@@ -20,8 +20,9 @@ Changes from the OgbujiPT original:
   descendants of a removed node, rather than decomposing nodes from a flat list
   that still holds their (already destroyed) children.
 - Drops HTML comments (lexbor's iter() yields them, and they have no attributes).
-- No longer removes `tabindex="-1"` elements. Sites commonly put that on the main
-  content container (a skip-link target), so the rule dropped whole pages.
+- Removing `tabindex="-1"` elements is opt-in (`drop_tabindex_minus_one=True`), not
+  always on. Sites commonly put that on the main content container (a skip-link
+  target), so the rule could drop whole pages.
 - Drops the chunking/token helpers and backward-compatibility shims anya doesn't use.
 '''
 
@@ -43,10 +44,12 @@ def _hides(style) -> bool:
     return 'none' in style.getPropertyValue('display') or 'hidden' in style.getPropertyValue('visibility')
 
 
-def _is_hidden(node: LexborNode) -> bool:
+def _is_hidden(node: LexborNode, drop_tabindex_minus_one: bool = False) -> bool:
     '''Whether a node is hidden by a stylesheet rule, its own style attribute, or aria-hidden.'''
     attrs = node.attrs
     if _HIDDEN_MARK in attrs or attrs.get('aria-hidden') == 'true':
+        return True
+    if drop_tabindex_minus_one and attrs.get('tabindex') == '-1':
         return True
     inline = attrs.get('style')
     return bool(inline) and _hides(cssutils.parseStyle(inline))
@@ -70,10 +73,14 @@ def _mark_stylesheet_hidden(tree: LexborHTMLParser) -> None:
                 elem.attrs[_HIDDEN_MARK] = '1'
 
 
-def clean_html(html: str) -> tuple[LexborHTMLParser, list[str]]:
+def clean_html(html: str, *, drop_tabindex_minus_one: bool = False) -> tuple[LexborHTMLParser, list[str]]:
     '''
     Parse HTML and remove content a reader wouldn't see: scripts, styles, and
     elements hidden by stylesheet rules, inline styles, or aria-hidden.
+
+    drop_tabindex_minus_one: also remove elements with tabindex="-1" (the original
+    OgbujiPT behavior). Off by default: it catches some off-screen widgets, but also
+    main-content containers that serve as skip-link targets.
 
     Returns (tree, removed_content), where removed_content holds the text of
     each removed element.
@@ -89,7 +96,7 @@ def clean_html(html: str) -> tuple[LexborHTMLParser, list[str]]:
         for child in list(node.iter()):
             if not child.is_element_node:  # comments etc.: invisible, and they have no attrs
                 child.decompose()
-            elif child.tag in ('script', 'style') or _is_hidden(child):
+            elif child.tag in ('script', 'style') or _is_hidden(child, drop_tabindex_minus_one):
                 removed.append(child.text(deep=True, separator='', strip=False))
                 child.decompose()
             else:

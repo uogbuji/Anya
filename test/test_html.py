@@ -94,3 +94,11 @@ def test_comments_dropped_without_error():
     html = '<!DOCTYPE html><html><body><!-- secret note --><div><!-- x --><p>visible</p></div></body></html>'
     assert _md(html) == 'visible'
     assert html2markdown(html) == 'visible'  # unclean input too
+
+
+def test_tabindex_minus_one_removal_is_opt_in():
+    html = '<main tabindex="-1"><p>Main text</p></main><div tabindex="-1">offscreen widget</div><p>after</p>'
+    tree, _ = clean_html(html, drop_tabindex_minus_one=True)
+    md = html2markdown(tree)
+    assert 'Main text' not in md and 'offscreen widget' not in md
+    assert 'after' in md

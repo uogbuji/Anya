@@ -52,11 +52,16 @@ class SimpleHttpFetcher(WebFetcher):
     Simple HTTP fetcher using httpx and OgbujiPT HTML processing.
 
     Best for: Static HTML pages without heavy JavaScript.
+
+    drop_tabindex_minus_one: also strip tabindex="-1" elements during cleaning
+    (see anya.fetchers._html.clean_html). Off by default.
     '''
 
-    def __init__(self, timeout: float = 30.0, follow_redirects: bool = True):
+    def __init__(self, timeout: float = 30.0, follow_redirects: bool = True,
+                 drop_tabindex_minus_one: bool = False):
         self.timeout = timeout
         self.follow_redirects = follow_redirects
+        self.drop_tabindex_minus_one = drop_tabindex_minus_one
 
     async def fetch(self, url: str) -> FetchResult:
         '''Fetch URL with httpx and convert HTML to markdown.'''
@@ -70,7 +75,7 @@ class SimpleHttpFetcher(WebFetcher):
                 response.raise_for_status()
 
                 html = response.content.decode(response.encoding or 'utf-8')
-                tree, _ = clean_html(html)
+                tree, _ = clean_html(html, drop_tabindex_minus_one=self.drop_tabindex_minus_one)
                 markdown = html2markdown(tree)
 
                 title = None

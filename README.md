@@ -219,8 +219,10 @@ result = await create_fetcher('crawl4ai').fetch('https://reddit.com/...')
 
 - `plain` (default) — simple HTTP, with hidden content stripped and the HTML converted to Markdown
 - `rss` — RSS/Atom feed via `feedparser`; returns a markdown summary of feed entries
-- `reddit` — rewrites any `*.reddit.com` URL (including `www.`) to `old.reddit.com` and sends a real User-Agent; falls back to the URL's `.rss` feed when blocked. Set `config.toml [fetch] reddit_user_agent` to override the default UA (Reddit's API guidelines ask the UA to identify your bot)
+- `reddit` — rewrites any `*.reddit.com` URL (including `www.`) to `old.reddit.com` and sends a real User-Agent; falls back to the URL's `.rss` feed when blocked. When Reddit answers with its login wall (a redirect to `/login`), which as of late 2026 covers unauthenticated page and feed requests alike, the fetch fails with that reason rather than returning the login page as content. Set `config.toml [fetch] reddit_user_agent` to override the default UA (Reddit's API guidelines ask the UA to identify your bot)
 - `crawl4ai` — Crawl4AI service for JS-heavy or bot-blocked sites. Run `docker run -p 11235:11235 unclecode/crawl4ai:basic` and set `config.toml [fetch] crawl4ai_base_url` if not on the default `http://localhost:11235`
+
+The `plain` and `reddit` fetchers strip content a reader wouldn't see (scripts, styles, and elements hidden by CSS or `aria-hidden`) before converting to Markdown. Pass `drop_tabindex_minus_one=True` (e.g. `create_fetcher('plain', drop_tabindex_minus_one=True)`) to also strip `tabindex="-1"` elements; it's off by default because many sites put that on their main content.
 
 All GET fetchers share an HTTP cache (hishel, RFC 9111) so we send `If-None-Match` / `If-Modified-Since` on revalidation and honor `Cache-Control` / `Vary` — be a good HTTP citizen. SQLite-backed, default at `data/http-cache.sqlite`; set `config.toml [paths] http_cache` to relocate. Delete the file to clear the cache.
 
