@@ -293,4 +293,7 @@ Days are local dates in the process's time zone (UTC in the Docker image unless 
 - **Controllers must treat inference output as untrusted input.** Don't `eval` it, don't pass it to a shell, don't construct paths from it. When LLM output drives control flow (loops over LLM-returned URLs, file paths, etc.), constrain it with a schema AND validate it against controller-side allow-lists or pre-fetched candidates.
 - **Synthesized reports** may contain prompt-injected content from upstream web data; that's acceptable for human-read email/blotter output, but worth flagging if downstream agents consume Anya output.
 
-A pattern that works well: fan-out filtering — a cheap model screens each candidate with a small structured-output question, then a stronger model synthesizes a report over the survivors.
+Two reference jobs ship in the repo, both with `phase = "ignore"` (run them with `--select_jobs=...` or `--phases=default,ignore`):
+
+- `job/example/`: the minimal shape: fetch, one `inference()` call, print a report.
+- `job/example-watch/`: a page watcher showing per-job state (`state.json` in its own dir), fan-out filtering (a cheap structured yes/no per changed page, then one synthesis call over the survivors), strict-compatible `response_schema`s, checking LLM-returned URLs against an allow-list, and pure logic split into a tested module (`watchlib.py`, run with `anya test`).

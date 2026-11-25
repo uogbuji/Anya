@@ -58,7 +58,7 @@ ANYA_JOB_DIR=/srv/anya/jobs.prod \
 > **Which jobs *run* vs. which are *present*** is still separate: `ANYA_PHASES` (default
 > `default`) and per-job `frequency` gate each tick, together with the run record in
 > `data/job-runs.json`: a job runs once per scheduled period, so container restarts don't
-> re-run it. Ad-hoc: `docker compose run --rm anya run --select_jobs=grant-hunter` bypasses
+> re-run it. Ad-hoc: `docker compose run --rm anya run --select_jobs=example-watch` bypasses
 > frequency and the record.
 
 ## One-time: remote Docker context for the Droplet
@@ -227,9 +227,9 @@ rebuilds (rebuilds only replace the runtime, never your content):
 - **Process state** — `data/blotter.txt`, `data/memory.txt`, the shared HTTP cache, and
   `data/job-runs.json` (when each job last ran) (`config.toml [paths]`, defaulting to `data/…`
   beside `/app/config.toml`) live under `./data`.
-- **Per-job state** — anything a controller writes into its own job dir (e.g.
-  `grant-hunter`'s `state.toml` seen-ledger + long-tail cursor) lives under the mounted
-  job dir, so weekly-continuation state just works — no per-job mount gymnastics needed.
+- **Per-job state** — anything a controller writes into its own job dir (e.g. the
+  reference job `example-watch`'s `state.json`, its per-page baselines) lives under the
+  mounted job dir, so state carried between runs just works — no per-job mount gymnastics needed.
 
 ## Inspecting a running stack (from your laptop, remote context active)
 
@@ -238,20 +238,21 @@ docker ps                                   # containers on the Droplet
 docker logs -f --tail 100 anya              # live tail of the scheduler
 docker exec -it anya bash                   # shell in for ad-hoc poking
 docker exec anya sh -c 'ls -la /app/data'   # wrap globs so they expand IN the container
-docker compose run --rm anya run --select_jobs=grant-hunter --email_to=you@example.com
+docker compose run --rm anya run --select_jobs=example-watch --email_to=you@example.com
                                             # one-off run of a single job (bypasses frequency)
 ```
 
 ## Resetting a job's state (re-run from scratch)
 
 To make a job re-process as if first-seen, clear its persisted state on the host (it lives in
-the mounted job dir, so just delete the file and restart):
+the mounted job dir), then run it once. A restart alone won't re-run it: the run record
+(`data/job-runs.json`) says it already ran today, and `--select_jobs` runs bypass that.
 
 ```bash
-# wipe the seen-ledger / cursor (and optionally the HTTP cache to re-fetch pages):
-rm -f job/grant-hunter/state.toml   # or $ANYA_JOB_DIR/grant-hunter/state.toml
-rm -f data/http-cache.sqlite        # optional: also re-download instead of revalidating
-docker restart anya
+# wipe the job's own state (and optionally the HTTP cache to re-fetch pages):
+rm -f job/example-watch/state.json   # or $ANYA_JOB_DIR/example-watch/state.json
+rm -f data/http-cache.sqlite         # optional: also re-download instead of revalidating
+docker compose run --rm anya run --select_jobs=example-watch
 ```
 
 ## Maintenance

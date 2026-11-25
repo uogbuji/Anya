@@ -9,4 +9,4 @@ Each subdirectory is one job:
 
 A `_`-prefixed directory such as `_lib/` holds shared code rather than a job; any controller can `from _lib import ...`. Put job tests beside the code (e.g. `_lib/test/`) and run them with `anya test`.
 
-See `example/`, and the "Job structure" section of the main README for the details. The example is skipped by default because its `phase` is `ignore`; run it with `anya run --phases=default,ignore`.
+Two reference jobs are committed: `example/` (the minimal shape) and `example-watch/` (per-job state, fan-out filtering, structured output, allow-list checks, tested helpers). See the "Job structure" section of the main README for details. Both are skipped by default because their `phase` is `ignore`; run them with `anya run --phases=default,ignore` or `--select_jobs=example-watch`.

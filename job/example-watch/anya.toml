@@ -1,0 +1,7 @@
+title = "Example: page watcher"
+description = "Reference job: watch a few pages, keep state in the job dir, filter changes with a cheap model, report significant ones."
+frequency = "daily"
+phase = "ignore"   # reference example: runs only with --phases=default,ignore or --select_jobs=example-watch
+entry = "controller.py"
+type = "pymain"
+prompts = "anya.loom.toml"

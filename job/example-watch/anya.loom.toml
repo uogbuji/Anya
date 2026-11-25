@@ -1,0 +1,29 @@
+# WordLoom prompts for the example-watch job.
+lang = 'en'
+
+# Fan-out filter: one cheap call per changed page.
+[significance-filter]
+_ = '''
+A web page we watch has changed. Decide whether the change is significant to a reader
+following this page: new content, releases, announcements, or changed facts count;
+timestamps, counters, rotating banners, and layout noise do not.
+
+Page: {url}
+
+## Before (excerpt)
+{before}
+
+## After (excerpt)
+{after}
+'''
+_m = ['url', 'before', 'after']
+
+# Synthesis over the pages that passed the filter.
+[change-report]
+_ = '''
+Write a short note for each page below, saying what changed and why it matters.
+Use each page's URL exactly as given.
+
+{changes}
+'''
+_m = ['changes']

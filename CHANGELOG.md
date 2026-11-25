@@ -25,6 +25,7 @@ Will be the first actual GitHub release.
 - `client=` on every fetcher, searcher, `fetch_rss`, `fetch_http`, and the `resend`/`unosend` email providers: pass an `httpx.AsyncClient` (e.g. one on `httpx.MockTransport` in tests) instead of letting each call make its own.
 - `verify=` on the `plain` fetcher (default `True`) to disable TLS certificate checks for a specific site.
 - `register_fetcher(name, factory)` and `register_searcher(name, factory)` in `anya.fetchers` to add fetch methods and search providers; they work with `create_fetcher`/`create_searcher` and `anya fetch --method`.
+- Reference job `job/example-watch/` (committed, `phase = "ignore"`): a page watcher demonstrating per-job state in the job dir, fan-out filtering with structured output, allow-list validation of LLM output, and tested pure helpers. The deploy docs now use it, instead of a private job, as their worked example.
 
 ### Changed
 - **Python 3.14 is now the minimum** (was 3.12). The Docker image's base moves to `python:3.14-slim`, pinned by digest as before.
@@ -65,6 +66,7 @@ Will be the first actual GitHub release.
 - A missing prompt id raised a `KeyError` that listed every prompt's full body, not just the prompt names.
 - Structured-output calls to OpenAI failed with HTTP 400 for any schema not written for strict mode (e.g. an object with optional properties), because `strict: true` was always sent. Such schemas are now sent non-strict.
 - OpenAI reasoning models rejected requests because of `max_tokens`.
+- `doc/DEPLOYMENT.md`: the "reset a job's state" recipe ended with a restart, which (with the run record) no longer re-runs the job; it now uses a one-off `--select_jobs` run.
 - `anya fetch --method=<unknown>` ended in a traceback; it now prints the valid methods.
 - A refused connection to an LLM backend (e.g. a local server that's down) escaped as a raw SDK error; it's now an `UpstreamAPIError`.
 - `base_url` in an Anthropic backend's `config.toml` entry was ignored.

@@ -9,6 +9,9 @@ data/
 job/*
 !job/example/
 !job/example/**
+!job/example-watch/
+!job/example-watch/**
+job/example-watch/state.json*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -37,7 +37,7 @@ services:
     volumes:
       # Deployer-curated job dir. The deploy ships THIS (rsync/git), not the image — change
       # ANYA_JOB_DIR to point elsewhere on the host. Read-write: jobs write their own state
-      # (e.g. grant-hunter's state.toml) here, so it persists across restarts AND rebuilds.
+      # (e.g. example-watch's state.json) here, so it persists across restarts AND rebuilds.
       # If this is missing/empty, `anya serve` refuses to start (no silent zero-job run).
       - ${ANYA_JOB_DIR:-./job}:/app/job
       # Process-level state — blotter, long-term memory, shared HTTP cache.
