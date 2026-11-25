@@ -8,7 +8,9 @@ more — that lives in the controller's calls to anya.inference.inference().
 '''
 
 import asyncio
+import html
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -38,28 +40,44 @@ def _final_error_line(stderr: str) -> str:
     return non_empty[-1].strip()
 
 
+_BLOCK_RES = {
+    'memory': re.compile(r'---MEMORY---(.*?)---END MEMORY---', re.DOTALL),
+    'resolved': re.compile(r'---RESOLVED---(.*?)---END RESOLVED---', re.DOTALL),
+}
+
+
 def _parse_blocks(stdout: str) -> tuple[str, str | None, str | None]:
     '''
     Pull ---MEMORY--- / ---RESOLVED--- blocks out of the controller's stdout.
 
-    Returns (summary, memory_content, resolved_content). Both block types are
-    optional. The summary has the blocks stripped.
+    Returns (summary, memory_content, resolved_content). Either block type may
+    appear zero or more times; multiple blocks of one type are joined with a blank
+    line. The summary is stdout with every complete block removed, so report text
+    before, between, and after blocks is kept. An unterminated marker is left in
+    the summary as-is rather than swallowing the rest of the report.
     '''
-    memory_content: str | None = None
-    resolved_content: str | None = None
+    found: dict[str, str | None] = {}
+    summary = stdout
+    for kind, pattern in _BLOCK_RES.items():
+        bodies = [m.strip() for m in pattern.findall(summary)]
+        found[kind] = '\n\n'.join(b for b in bodies if b) or None
+        summary = pattern.sub('', summary)
+    summary = re.sub(r'\n{3,}', '\n\n', summary).strip()
+    return summary, found['memory'], found['resolved']
 
-    if '---MEMORY---' in stdout and '---END MEMORY---' in stdout:
-        start = stdout.index('---MEMORY---') + len('---MEMORY---')
-        end = stdout.index('---END MEMORY---')
-        memory_content = stdout[start:end].strip() or None
 
-    if '---RESOLVED---' in stdout and '---END RESOLVED---' in stdout:
-        start = stdout.index('---RESOLVED---') + len('---RESOLVED---')
-        end = stdout.index('---END RESOLVED---')
-        resolved_content = stdout[start:end].strip() or None
+def report_bodies(sections: list[tuple[str, str]]) -> tuple[str, str]:
+    '''
+    Render (job_id, report) sections as (html, text) email bodies.
 
-    summary = stdout.split('---MEMORY---')[0].split('---RESOLVED---')[0].strip()
-    return summary, memory_content, resolved_content
+    Report text is untrusted: it carries LLM output over fetched web content, which a
+    prompt-injected page can steer. It is HTML-escaped, so it shows as text in the
+    email and can't inject markup, links, or tracking images.
+    '''
+    html_body = '\n'.join(
+        f'<h2>Job: {html.escape(jid)}</h2><pre>{html.escape(content)}</pre>' for jid, content in sections)
+    text_body = '\n\n'.join(f'## Job: {jid}\n\n{content}' for jid, content in sections)
+    return html_body, text_body
 
 
 def _add_shared_lib_path(env: dict[str, str], job_path: Path) -> dict[str, str]:
@@ -155,8 +173,8 @@ async def execute_job(
         summary = f'**System issue**: {e}\n\n---\n\n{summary}'
 
     if email_to and not skip_email:
-        html = f'<h2>Job: {job.id}</h2><pre>{summary}</pre>'
-        await send_email(to=email_to, subject=f'[Anya] {job.id}', html=html, text=summary)
+        html_body, _ = report_bodies([(job.id, summary)])
+        await send_email(to=email_to, subject=f'[Anya] {job.id}', html=html_body, text=summary)
 
     log.info('job complete', job_id=job.id)
     return (job.id, summary)

@@ -95,7 +95,7 @@ provider = "anthropic"
 model = "claude-haiku-4-5-20251001"
 ```
 
-A `config.toml` defining at least one `[models.backends.*]` is **required** — there's no env-var fallback for synthesizing a backend. Anya resolves it from `--config`, then `$ANYA_CONFIG_FILE`, then `./config.toml`. API keys stay in env; reference them in `config.toml` via `${ENV_VAR}` (a literal secret there logs a warning).
+A `config.toml` defining at least one `[models.backends.*]` is **required** — there's no env-var fallback for synthesizing a backend. Anya resolves it from `--config`, then `$ANYA_CONFIG_FILE`, then `./config.toml` — the same order for the CLI and for controllers. API keys stay in env; reference them in `config.toml` via `${ENV_VAR}` (a literal secret there logs a warning).
 
 | Provider | config.toml | Capability |
 |----------|-------------|------------|
@@ -157,7 +157,7 @@ A regular Python program. It runs as a subprocess with these env vars set:
 - `ANYA_CONFIG_FILE` (resolved path to `config.toml`, if any)
 - `ANYA_JOB_SELECT` (when `select` is set)
 
-Whatever the controller prints to stdout becomes the job's report (emailed and blottered). The controller may emit `---MEMORY---` / `---END MEMORY---` and `---RESOLVED---` / `---END RESOLVED---` blocks to drive long-term memory; those are stripped from the user-facing report.
+Whatever the controller prints to stdout becomes the job's report (emailed and blottered). The controller may emit `---MEMORY---` / `---END MEMORY---` and `---RESOLVED---` / `---END RESOLVED---` blocks (any number, anywhere in the output) to drive long-term memory; those are stripped from the user-facing report, and the text around them is kept.
 
 ```python
 import asyncio
@@ -247,6 +247,9 @@ A missing key is a soft failure (`success=False` with a logged warning), not a c
 For **Reddit** as a query source, no special searcher is needed: point the existing `reddit` fetcher at a search URL (e.g. `https://www.reddit.com/r/RevOps/search?q=hubspot&restrict_sr=1&sort=new`) — it rewrites to `old.reddit.com` and falls back to the `.rss` of that search.
 
 ## Blotter & memory
+
+Relative paths in `config.toml [paths]` (blotter, memory, HTTP cache) resolve against the directory holding `config.toml`, so the runner and every controller share the same files.
+
 
 - **Blotter** (`data/blotter.txt` by default): append-only log for review. Set `config.toml [paths] blotter` or `--blotter` CLI to share with other agent systems. Uses file locking (`{blotter}.lock`); `config.toml [blotter] lock_timeout` (default 30s).
 - **Memory** (`data/memory.txt`, or `config.toml [paths] memory`): long-term; controllers can append via `---MEMORY---` blocks on stdout, or prune resolved issues via `---RESOLVED---` blocks.

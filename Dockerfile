@@ -46,8 +46,8 @@ ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1
 
 WORKDIR /app
-# The HTTP cache, blotter, and memory default to data/… under this WORKDIR (config.toml
-# [paths]), i.e. /app/data — the persisted volume. Override in config.toml, not via env.
+# The HTTP cache, blotter, and memory default to data/… relative to config.toml's directory
+# (config.toml [paths]), i.e. /app/data — the persisted volume. Override in config.toml, not via env.
 
 # config.toml is a sensible baked-in default (model aliases/backends the image was built
 # against). Mount your own over /app/config.toml to override without a rebuild.

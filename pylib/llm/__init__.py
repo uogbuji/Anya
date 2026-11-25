@@ -11,17 +11,23 @@ Tool use is NOT exposed. Callers cannot pass tools=; the dispatcher refuses
 to forward any tool/function-call kwarg. Inference is text-in / text-or-JSON-out.
 '''
 
+import asyncio
 import json
 from typing import Any
 
 from anya.config import BackendConfig
 
 
-# Neither SDK's own default (600s) is a safe wait inside a job whose executor
-# also kills the whole controller at 600s: a single stalled upstream request
-# would silently eat the job's entire time budget with no error surfaced.
-# Well under that ceiling, so a hang fails fast as UpstreamAPIError instead.
+# Time limits, all well under the executor's 600s controller ceiling, so a stalled
+# provider fails as UpstreamAPIError instead of silently eating the job's whole budget.
+# - REQUEST_TIMEOUT: one HTTP attempt (the SDKs' own default is 600s).
+# - MAX_RETRIES: SDK retries on timeouts/429/5xx (default 2). Each retry can take a
+#   full REQUEST_TIMEOUT, so this multiplies the worst case.
+# - CALL_BUDGET: the whole complete() call, including the JSON-repair second request
+#   on OpenAI-compatible backends, so retries can't stack past it.
 REQUEST_TIMEOUT = 90.0
+MAX_RETRIES = 1
+CALL_BUDGET = 240.0
 
 
 _DISALLOWED_KWARGS = frozenset({
@@ -125,11 +131,19 @@ async def complete(
     '''
     _check_kwargs(extra)
 
-    if backend.provider == 'anthropic':
-        return await _anthropic(backend, system, user, response_schema, max_tokens, temperature)
-    if backend.provider == 'openai':
-        return await _openai(backend, system, user, response_schema, max_tokens, temperature)
-    raise ValueError(f'Unknown provider: {backend.provider!r}')
+    match backend.provider:
+        case 'anthropic':
+            call = _anthropic
+        case 'openai':
+            call = _openai
+        case _:
+            raise ValueError(f'Unknown provider: {backend.provider!r}')
+    try:
+        async with asyncio.timeout(CALL_BUDGET):
+            return await call(backend, system, user, response_schema, max_tokens, temperature)
+    except TimeoutError:
+        raise UpstreamAPIError(
+            f'{backend.name}: no complete response within {CALL_BUDGET:.0f}s (including retries)') from None
 
 
 async def _anthropic(
@@ -140,9 +154,8 @@ async def _anthropic(
     max_tokens: int,
     temperature: float | None,
 ) -> str | dict:
-    from anthropic import APIStatusError, APITimeoutError, AsyncAnthropic
+    from anthropic import APIConnectionError, APIStatusError, APITimeoutError, AsyncAnthropic
 
-    client = AsyncAnthropic(api_key=backend.api_key, timeout=REQUEST_TIMEOUT)
     params: dict[str, Any] = {
         'model': backend.model,
         'max_tokens': max_tokens,
@@ -152,25 +165,29 @@ async def _anthropic(
     if temperature is not None:
         params['temperature'] = temperature
 
+    tool_name = 'emit_result'
     try:
-        if schema is None:
-            msg = await client.messages.create(**params)
-            return msg.content[0].text
+        async with AsyncAnthropic(api_key=backend.api_key, base_url=backend.base_url,
+                                  timeout=REQUEST_TIMEOUT, max_retries=MAX_RETRIES) as client:
+            if schema is None:
+                msg = await client.messages.create(**params)
+                return msg.content[0].text
 
-        # Schema requested → coerce via tool-use (Anthropic's native way to force JSON).
-        tool_name = 'emit_result'
-        tool = {
-            'name': tool_name,
-            'description': 'Emit the structured result.',
-            'input_schema': schema,
-        }
-        msg = await client.messages.create(
-            **params,
-            tools=[tool],
-            tool_choice={'type': 'tool', 'name': tool_name},
-        )
+            # Schema requested → coerce via tool-use (Anthropic's native way to force JSON).
+            tool = {
+                'name': tool_name,
+                'description': 'Emit the structured result.',
+                'input_schema': schema,
+            }
+            msg = await client.messages.create(
+                **params,
+                tools=[tool],
+                tool_choice={'type': 'tool', 'name': tool_name},
+            )
     except APITimeoutError as e:
         raise UpstreamAPIError(f'{backend.name} (anthropic): request timed out after {REQUEST_TIMEOUT}s') from e
+    except APIConnectionError as e:  # after APITimeoutError, its subclass
+        raise UpstreamAPIError(f'{backend.name} (anthropic): could not connect: {e}') from e
     except APIStatusError as e:
         raise _wrap_anthropic_error(backend, e) from None
 
@@ -190,16 +207,11 @@ async def _openai(
     max_tokens: int,
     temperature: float | None,
 ) -> str | dict:
-    from openai import APIStatusError, APITimeoutError, AsyncOpenAI
+    from openai import APIConnectionError, APIStatusError, APITimeoutError, AsyncOpenAI
 
     if not backend.model:
         raise ValueError(f'Backend {backend.name!r}: model is required for OpenAI-compatible provider')
 
-    client = AsyncOpenAI(
-        base_url=backend.base_url,
-        api_key=backend.api_key or 'not-needed',
-        timeout=REQUEST_TIMEOUT,
-    )
     params: dict[str, Any] = {
         'model': backend.model,
         'max_tokens': max_tokens,
@@ -212,38 +224,42 @@ async def _openai(
         params['temperature'] = temperature
 
     try:
-        if schema is None:
-            resp = await client.chat.completions.create(**params)
-            return resp.choices[0].message.content or ''
+        async with AsyncOpenAI(base_url=backend.base_url, api_key=backend.api_key or 'not-needed',
+                               timeout=REQUEST_TIMEOUT, max_retries=MAX_RETRIES) as client:
+            if schema is None:
+                resp = await client.chat.completions.create(**params)
+                return resp.choices[0].message.content or ''
 
-        # Schema requested → ask for structured JSON. Many servers (including
-        # grammar-capable oMLX builds) honor response_format json_schema. If a
-        # backend ignores it, we fall back to one post-hoc parse-and-retry.
-        schema_params = dict(params)
-        schema_params['response_format'] = {
-            'type': 'json_schema',
-            'json_schema': {'name': 'result', 'schema': schema, 'strict': True},
-        }
-        resp = await client.chat.completions.create(**schema_params)
-        raw = resp.choices[0].message.content or ''
-        try:
-            return json.loads(raw)
-        except json.JSONDecodeError:
-            pass
+            # Schema requested → ask for structured JSON. Many servers (including
+            # grammar-capable oMLX builds) honor response_format json_schema. If a
+            # backend ignores it, we fall back to one post-hoc parse-and-retry.
+            schema_params = dict(params)
+            schema_params['response_format'] = {
+                'type': 'json_schema',
+                'json_schema': {'name': 'result', 'schema': schema, 'strict': True},
+            }
+            resp = await client.chat.completions.create(**schema_params)
+            raw = resp.choices[0].message.content or ''
+            try:
+                return json.loads(raw)
+            except json.JSONDecodeError:
+                pass
 
-        # Retry once, more explicit about the JSON contract.
-        nudge = f'{user}\n\nYour reply MUST be a single JSON object matching this schema:\n{json.dumps(schema)}'
-        retry_params = dict(params)
-        retry_params['messages'] = [
-            {'role': 'system', 'content': system},
-            {'role': 'user', 'content': nudge},
-        ]
-        retry_params['response_format'] = schema_params['response_format']
-        resp = await client.chat.completions.create(**retry_params)
-        raw = resp.choices[0].message.content or ''
+            # Retry once, more explicit about the JSON contract.
+            nudge = f'{user}\n\nYour reply MUST be a single JSON object matching this schema:\n{json.dumps(schema)}'
+            retry_params = dict(params)
+            retry_params['messages'] = [
+                {'role': 'system', 'content': system},
+                {'role': 'user', 'content': nudge},
+            ]
+            retry_params['response_format'] = schema_params['response_format']
+            resp = await client.chat.completions.create(**retry_params)
+            raw = resp.choices[0].message.content or ''
     except APITimeoutError as e:
         raise UpstreamAPIError(f'{backend.name} via {backend.base_url or "(openai)"}: '
                                 f'request timed out after {REQUEST_TIMEOUT}s') from e
+    except APIConnectionError as e:  # after APITimeoutError, its subclass
+        raise UpstreamAPIError(f'{backend.name} via {backend.base_url or "(openai)"}: could not connect: {e}') from e
     except APIStatusError as e:
         raise _wrap_openai_error(backend, e) from None
 

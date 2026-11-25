@@ -23,6 +23,10 @@ Will be the first actual GitHub release.
 - Requires `selectolax>=1.0.2` and `hishel>=2.0`.
 - `pytest` now collects only `test/` and skips tests marked `integration` by default (run those with `pytest -m integration`). Previously it also picked up tests under the gitignored `job/` tree. Test tooling is available as the `test` extra: `uv pip install '.[test]'`.
 
+- Relative paths in `config.toml [paths]` now resolve against the config file's directory, not the current working directory. For the usual layout (`config.toml` beside `data/`) nothing moves.
+- LLM calls: SDK retries are capped at 1 (was the SDKs' default of 2), and each `inference()` call has an overall 240s limit covering retries and the JSON-repair second request, surfacing as `UpstreamAPIError`. Previously a stall could take up to 270s per request, or about 540s for a structured-output call, against the executor's 600s ceiling. LLM clients are now closed after each call.
+- Controllers may emit several `---MEMORY---` / `---RESOLVED---` blocks; each type's blocks are joined.
+
 ### Removed
 - APScheduler support (`anya serve --scheduler=apscheduler` and the `scheduler-apscheduler` extra). It was only used as an interval timer, which the built-in asyncio scheduler already provides.
 - The `scheduler-cron`, `scheduler-schedule`, `imap`, and `all` extras. No code used them.
@@ -33,6 +37,13 @@ Will be the first actual GitHub release.
 - Content hidden by an inline `style="display: none"` (or `visibility: hidden`) is now removed before conversion. The inline style was parsed as a stylesheet, so it never matched.
 - HTML cleaning no longer drops elements with `tabindex="-1"` by default; sites commonly put that on the main content container.
 - `reddit` fetcher: Reddit's login wall (a redirect to `/login` serving a 200 "Welcome to Reddit" page) was returned as successful content, and the RSS fallback would have parsed the same page as an empty feed. Both paths now detect the wall and report it as a failure. The fallback also reuses one HTTP client and now returns the feed's title.
+- Report emails put job output into the HTML body unescaped. Since reports carry LLM output over fetched web content, a prompt-injected page could add links, images, or tracking pixels to the email. Report text is now HTML-escaped.
+- One job that failed to load (unparseable `anya.toml`, missing entry file, unsupported type) aborted the whole tick, so no job ran. Each job now loads independently, and a load failure is logged and included in the report email (as `ERROR: job failed to load - ...`), filtered by `--select_jobs`/`--exclude_jobs` like other jobs.
+- The HTTP cache wasn't shared: its default path was resolved relative to each controller's working directory (its job dir), giving every job its own cache under `job/<id>/data/`. It's now one cache beside `config.toml`. Old per-job `job/*/data/http-cache.sqlite` files can be deleted.
+- The CLI looked for `./config.toml` before `$ANYA_CONFIG_FILE`, the reverse of the documented order (and of what controllers use). Both now use `--config`, then `$ANYA_CONFIG_FILE`, then `./config.toml`.
+- Report text that a controller printed after a `---MEMORY---` or `---RESOLVED---` block was dropped from the report. Only the blocks themselves are removed now, and an unterminated marker no longer swallows the rest of the report.
+- A refused connection to an LLM backend (e.g. a local server that's down) escaped as a raw SDK error; it's now an `UpstreamAPIError`.
+- `base_url` in an Anthropic backend's `config.toml` entry was ignored.
 - `inference()`: the Anthropic and OpenAI-compatible clients now set an explicit 90s request timeout instead of inheriting the SDKs' 600s default, which matched the executor's own 600s controller timeout. A single stalled upstream LLM call could silently eat a job's entire time budget, surfacing only as `TimeoutError: Controller ... exceeded 600s` with no application-level error. A stall now raises `UpstreamAPIError` instead.
 
 ## [0.3.1] - 20260702

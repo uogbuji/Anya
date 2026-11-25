@@ -11,7 +11,7 @@ import structlog
 from rich.console import Console
 from rich.panel import Panel
 
-from anya.config import AnyaConfig, get_config
+from anya.config import AnyaConfig, get_config, resolve_config_path
 from anya.fetchers import create_fetcher, create_searcher
 from anya.job.loader import discover_jobs
 from anya.runner import run_tick
@@ -55,16 +55,8 @@ def _resolve_email_to(email_to: str, cfg: AnyaConfig) -> list[str]:
 
 
 def _resolve_config_path(config: str) -> Path | None:
-    '''Resolve the config path argument. Empty string → search default locations.'''
-    if config:
-        return Path(config)
-    candidate = Path('config.toml')
-    if candidate.exists():
-        return candidate
-    env = os.environ.get('ANYA_CONFIG_FILE')
-    if env:
-        return Path(env)
-    return None
+    '''--config when given, else the shared lookup ($ANYA_CONFIG_FILE, then ./config.toml).'''
+    return resolve_config_path(Path(config) if config else None)
 
 
 def main() -> None:
@@ -99,7 +91,7 @@ def run_once(
       are skipped unless "ignore" is in phases.
     select_jobs: comma-separated job ids to run (bypasses frequency; for dev/testing)
     exclude_jobs: comma-separated job ids to skip (after phase and select filters)
-    config: path to Anya config.toml (default: ./config.toml if present, else ANYA_CONFIG_FILE env)
+    config: path to Anya config.toml (default: $ANYA_CONFIG_FILE, else ./config.toml)
     '''
     job_path = Path(job_dir)
 
@@ -213,7 +205,7 @@ def fetch(
     target: a URL (for fetch methods) or a search query (for search methods)
     method: plain | crawl4ai | reddit | rss (fetch a URL)
             | tavily | brave (search a query). Default: plain.
-    config: path to Anya config.toml (default: ./config.toml if present, else ANYA_CONFIG_FILE env).
+    config: path to Anya config.toml (default: $ANYA_CONFIG_FILE, else ./config.toml).
       Supplies crawl4ai_base_url, result counts, reddit UA, etc.
 
     Only result.markdown goes to stdout (pipeable); a status line (method, url,

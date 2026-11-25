@@ -1,5 +1,7 @@
 '''Unit tests for config.py: the config/secret split and the get_config accessor.'''
 
+from pathlib import Path
+
 import pytest
 import structlog
 
@@ -59,7 +61,7 @@ def test_section_defaults_when_absent(tmp_path):
     assert cfg.email.from_addr is None
     assert cfg.fetch.crawl4ai_base_url == cfgmod.DEFAULT_CRAWL4AI_BASE_URL
     assert cfg.fetch.reddit_user_agent == cfgmod.DEFAULT_REDDIT_USER_AGENT
-    assert cfg.paths.blotter == 'data/blotter.txt'
+    assert cfg.paths.blotter == str((tmp_path / 'data' / 'blotter.txt').resolve())
     assert cfg.blotter_lock_timeout == 30.0
 
 
@@ -114,3 +116,35 @@ def test_get_config_caches_and_reloads(tmp_path):
     assert get_config() is first              # cached: same object, no path needed
     second = get_config(p, reload=True)       # forced reload: fresh object
     assert second is not first
+
+
+def test_relative_paths_resolve_against_config_dir(tmp_path, monkeypatch):
+    # Regression: paths were cwd-relative, and controllers run with their job dir as cwd,
+    # so each job got its own HTTP cache under job/<id>/data/.
+    conf_dir = tmp_path / 'deploy'
+    conf_dir.mkdir()
+    p = conf_dir / 'config.toml'
+    p.write_text(MINIMAL_BACKEND + '[paths]\nhttp_cache = "cache/http.sqlite"\nmemory = "/abs/memory.txt"\n')
+    elsewhere = tmp_path / 'job' / 'some-job'
+    elsewhere.mkdir(parents=True)
+    monkeypatch.chdir(elsewhere)  # as a controller would be
+    cfg = load_config(p)
+    assert cfg.paths.http_cache == str((conf_dir / 'cache' / 'http.sqlite').resolve())
+    assert cfg.paths.blotter == str((conf_dir / 'data' / 'blotter.txt').resolve())
+    assert cfg.paths.memory == str(Path('/abs/memory.txt').resolve())
+
+
+def test_config_lookup_prefers_env_over_cwd(tmp_path, monkeypatch):
+    # Regression: the CLI checked ./config.toml before $ANYA_CONFIG_FILE, the reverse of the docs.
+    from anya.cli.main import _resolve_config_path
+
+    (tmp_path / 'config.toml').write_text(MINIMAL_BACKEND)
+    env_conf = tmp_path / 'env-config.toml'
+    env_conf.write_text(MINIMAL_BACKEND)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv('ANYA_CONFIG_FILE', str(env_conf))
+    assert _resolve_config_path('') == env_conf
+    assert cfgmod.resolve_config_path() == env_conf
+    assert _resolve_config_path('explicit.toml') == Path('explicit.toml')  # --config wins
+    monkeypatch.delenv('ANYA_CONFIG_FILE')
+    assert _resolve_config_path('') == Path('config.toml')

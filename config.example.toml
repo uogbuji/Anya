@@ -53,7 +53,8 @@ reddit_user_agent = "python:anya:0.2 (by /u/anya)"  # Reddit asks the UA to iden
 tavily_max_results = 10                             # tavily search fetcher (key: TAVILY_API_KEY in env)
 brave_max_results = 10                              # brave search fetcher (key: BRAVE_API_KEY in env)
 
-# Filesystem paths (relative to the working dir; CLI flags --blotter/--memory override).
+# Filesystem paths. Relative paths resolve against this config file's directory, so every
+# controller shares the same files. CLI flags --blotter/--memory override.
 [paths]
 blotter = "data/blotter.txt"
 memory = "data/memory.txt"

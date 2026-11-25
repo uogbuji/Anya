@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+import structlog
 from dotenv import dotenv_values
 
 
@@ -130,9 +131,13 @@ def filter_by_job_ids(
     return result
 
 
-def discover_jobs(job_dir: Path) -> list[Job]:
+def discover_jobs(job_dir: Path, *, errors: list[tuple[str, str]] | None = None) -> list[Job]:
     '''
     Discover all jobs in job_dir. Each subdir with anya.toml is a job.
+
+    A job that fails to load (bad TOML, missing entry file, unsupported type) is
+    logged and skipped, so one broken job can't stop the others. Pass an `errors`
+    list to also collect (dir_name, message) for each failure, e.g. to report it.
     '''
     jobs: list[Job] = []
     if not job_dir.exists():
@@ -140,10 +145,17 @@ def discover_jobs(job_dir: Path) -> list[Job]:
     for entry in sorted(job_dir.iterdir()):
         # `.`-prefixed dirs are hidden; `_`-prefixed dirs (e.g. `_lib/`) are
         # shared code referenced by controllers, not jobs themselves.
-        if entry.is_dir() and not entry.name.startswith(('.', '_')):
+        if not entry.is_dir() or entry.name.startswith(('.', '_')):
+            continue
+        try:
             job = load_job(entry)
-            if job:
-                jobs.append(job)
+        except Exception as e:  # noqa: BLE001 — isolate each job's load failure
+            structlog.get_logger().error('job failed to load; skipping', job_dir=str(entry), error=str(e))
+            if errors is not None:
+                errors.append((entry.name, f'{type(e).__name__}: {e}'))
+            continue
+        if job:
+            jobs.append(job)
     return jobs
 
 

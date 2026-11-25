@@ -36,7 +36,7 @@ config.toml layout:
     tavily_max_results = 10                             # search fetcher (TAVILY_API_KEY in env)
     brave_max_results = 10                              # search fetcher (BRAVE_API_KEY in env)
 
-    [paths]
+    [paths]                                 # relative paths resolve against this file's dir
     blotter = "data/blotter.txt"            # was BLOTTER_FILE
     memory = "data/memory.txt"
     http_cache = "data/http-cache.sqlite"   # was ANYA_HTTP_CACHE
@@ -109,7 +109,10 @@ class FetchConfig:
 
 @dataclass(frozen=True)
 class PathsConfig:
-    '''Filesystem paths (CLI flags still override at the call site).'''
+    '''
+    Filesystem paths. Defaults are relative to the config file's directory; load_config
+    makes them absolute. CLI flags still override at the call site.
+    '''
 
     blotter: str = 'data/blotter.txt'
     memory: str = 'data/memory.txt'
@@ -235,18 +238,26 @@ def _parse_fetch(data: dict) -> FetchConfig:
     )
 
 
-def _parse_paths(data: dict) -> PathsConfig:
+def _parse_paths(data: dict, base_dir: Path) -> PathsConfig:
+    '''
+    Parse [paths], resolving relative entries against base_dir (the config file's
+    directory). Controllers run with their job dir as cwd, so a cwd-relative path
+    would point somewhere different in every controller (e.g. one HTTP cache per job).
+    '''
     section = data.get('paths', {})
     defaults = PathsConfig()
-    return PathsConfig(
-        blotter=str(section.get('blotter', defaults.blotter)),
-        memory=str(section.get('memory', defaults.memory)),
-        http_cache=str(section.get('http_cache', defaults.http_cache)),
-    )
+
+    def resolve(key: str) -> str:
+        return str((base_dir / Path(str(section.get(key, getattr(defaults, key)))).expanduser()).resolve())
+
+    return PathsConfig(blotter=resolve('blotter'), memory=resolve('memory'), http_cache=resolve('http_cache'))
 
 
-def _resolve_config_path(path: Path | None) -> Path | None:
-    '''Resolve the config path: explicit arg, then $ANYA_CONFIG_FILE, then ./config.toml.'''
+def resolve_config_path(path: Path | None = None) -> Path | None:
+    '''
+    Find the config file: explicit arg, then $ANYA_CONFIG_FILE, then ./config.toml.
+    Returns None if none applies. The CLI and controllers share this order.
+    '''
     if path is not None:
         return path
     env_path = os.environ.get('ANYA_CONFIG_FILE')
@@ -262,7 +273,7 @@ def load_config(path: Path | None = None) -> AnyaConfig:
     then ./config.toml. A config file defining at least one [models.backends.*] is
     required — there is no env-var fallback for synthesizing a backend.
     '''
-    resolved = _resolve_config_path(path)
+    resolved = resolve_config_path(path)
     if resolved is None or not resolved.exists():
         raise ValueError(
             'No config.toml found. Anya needs a config file defining at least one '
@@ -292,7 +303,7 @@ def load_config(path: Path | None = None) -> AnyaConfig:
         default=default,
         email=_parse_email(data),
         fetch=_parse_fetch(data),
-        paths=_parse_paths(data),
+        paths=_parse_paths(data, resolved.resolve().parent),
         blotter_lock_timeout=float(blotter_section.get('lock_timeout', 30.0)),
     )
 
